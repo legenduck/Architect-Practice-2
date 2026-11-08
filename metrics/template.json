@@ -1,0 +1,8 @@
+{
+  "name": "평균 실행 시간 (형식 예시)",
+  "purpose": "담당 업무에서 평가하려는 내용으로 수정",
+  "expression": "elapsed_seconds",
+  "aggregation": "mean",
+  "unit": "초",
+  "interpretation": "이 값으로 어떤 판단을 할지 작성"
+}

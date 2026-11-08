@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "status": "awaiting_real_records",
+  "description": "실제 Codex 실행 기록은 아직 등록되지 않았습니다.",
+  "task": "실습 1의 할인 쿠폰 기능 추가",
+  "scenario_order": ["context_overload", "repeated_work", "reasoning_reliance", "reference"],
+  "measurement_scope": "각 과제를 수행한 실행 기록. 지표를 설계하는 수강생의 분석 대화는 포함하지 않음"
+}
