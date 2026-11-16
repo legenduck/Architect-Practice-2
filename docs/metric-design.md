@@ -54,14 +54,14 @@
 
 ## 작업 구간의 측정값 활용
 
-구간별 기록이 제공되면 해당 구간의 값을 계산식에 연결할 수 있습니다. 아래는 '문서 조회' 구간에 배분된 입력 토큰이 전체 입력에서 차지하는 비율의 형식 예시입니다. `phase`는 실제 `phases.jsonl`에 있는 이름과 일치해야 합니다.
+구간별 기록이 제공되면 해당 구간의 값을 계산식에 연결할 수 있습니다. 아래는 '자료 확인' 구간에 배분된 입력 토큰이 전체 입력에서 차지하는 비율의 형식 예시입니다. `phase`는 로그의 activity와 일치해야 합니다. 제공 자료에는 `자료 확인`, `검증 준비`, `구현`, `금액 검증`, `검증`, `결과 정리`가 있습니다. 기존 data/ 형식에서는 phases.jsonl의 phase를 사용합니다.
 
 ```json
 {
   "name": "문서 조회 구간의 입력 비율",
   "purpose": "입력 자원이 문서 조회 구간에 집중되는 정도 확인",
   "phase_inputs": {
-    "reading_input": {"phase": "문서 조회", "measure": "input_tokens"}
+    "reading_input": {"phase": "자료 확인", "measure": "input_tokens"}
   },
   "expression": "100 * reading_input / input_tokens",
   "aggregation": "mean",
@@ -74,6 +74,29 @@
 
 ## Codex 요청 예시
 
-> 담당 업무에서 평가할 내용은 [평가 목적]입니다. docs/metric-design.md의 형식과 data/README.md의 측정값 정의를 확인하고, 이 목적에 맞는 metrics/my_metric.json을 작성해 주세요. 계산식과 집계 방식이 무엇을 의미하는지도 설명해 주세요. 원본 데이터는 수정하지 마세요.
+> 담당 업무에서 평가할 내용은 [평가 목적]입니다. docs/metric-design.md의 형식과 log_pairs/README.md의 측정값 정의를 확인하고, 이 목적에 맞는 metrics/my_metric.json을 작성해 주세요. 계산식과 집계 방식이 무엇을 의미하는지도 설명해 주세요. 원본 데이터는 수정하지 마세요.
 
 계산 결과를 확인한 뒤에는 해당 지표로 드러나지 않는 차이를 검토하고 필요하면 정의를 보완합니다. 어떤 작업 방식이 1위인지 정하는 대신, 지표가 업무 판단에 필요한 차이를 설명하는지 확인합니다.
+
+## 제공 로그에서 추가로 사용할 재료
+
+기본 명령은 `log_pairs/`를 검증한 뒤 집계합니다. 미리 만들어 둔 `materials.json`의 숫자를 그대로 신뢰하지 않습니다. 아래 이름도 expression에 사용할 수 있습니다.
+
+| 이름 | 의미 |
+|---|---|
+| `first_input_tokens` | 첫 요청의 입력 토큰 |
+| `reasoning_output_tokens` | 교육 자료의 가정에 따라 부여한 추론 출력 토큰. 실제 내부 추론 측정값 아님 |
+| `test_runs` | 테스트 실행 횟수 |
+| `same_state_passed_rechecks` | 코드·테스트·데이터·환경·검증 범위가 같고 직전 통과 근거가 있는 재검증 횟수 |
+| `document_lookups` | 조회한 문서 대상 수. 한 호출이 여러 문서를 읽으면 각각 집계 |
+| `same_document_range_lookups` | 동일 문서 버전의 동일 범위 재조회 수 |
+| `model_seconds`, `tool_seconds` | 모델 구간·도구 구간의 시간 합. 요청 전체 시간과 중복 합산하지 않음 |
+| `calculation_items` | 서로 다른 금액 검증 입력 수. 네 사례 모두 8개 |
+| `calculator_executions` | 금액 검증 도구 실행 횟수 |
+| `calculation_explanation_occurrences` | 금액 검증 메시지의 사례 ID 등장 횟수. 숨겨진 추론 횟수 아님 |
+| `calculation_input_tokens`, `calculation_output_tokens` | 금액 검증 요청의 입력·출력 토큰 |
+| `calculation_seconds`, `calculation_cost` | 금액 검증 요청의 전체 시간·환산 비용 |
+
+현재 자료의 `retries`는 **미제공**입니다. 반복 테스트와 실패 재시도를 같은 값으로 취급하지 않습니다. 반복 검증 비율은 `100 * same_state_passed_rechecks / test_runs`처럼 정의할 수 있습니다. 반복 자체가 불필요했는지는 로그를 보고 별도로 판단합니다.
+
+구간 값은 한 요청의 전체 usage와 시간을 해당 activity에 배분합니다. 해당 문서 자체의 순수 토큰 수가 아닙니다. 토큰·시간은 재구성 과정의 모델값이고, 비용은 자료에 명시된 단가로 환산한 교육용 값입니다.

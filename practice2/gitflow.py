@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import os
+import json
 import subprocess
 from pathlib import Path
 from urllib.parse import urlparse
@@ -20,7 +22,10 @@ def participant(value: str) -> str:
     return identifier
 
 
-def git(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
+def git(root: Path, *args: str, check: bool = True, timeout: int = 120) -> subprocess.CompletedProcess:
+    env = os.environ.copy()
+    env.update(GIT_TERMINAL_PROMPT="0", GCM_INTERACTIVE="never")
+    env.setdefault("GIT_SSH_COMMAND", "ssh -o BatchMode=yes -o ConnectTimeout=15")
     done = subprocess.run(
         ["git", *args],
         cwd=root,
@@ -28,7 +33,8 @@ def git(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProce
         text=True,
         encoding="utf-8",
         errors="replace",
-        timeout=120,
+        timeout=timeout,
+        env=env,
     )
     if check and done.returncode:
         raise ValueError("Git 명령을 완료하지 못했습니다.\n" + done.stderr.strip())
@@ -48,11 +54,12 @@ def canonical(url: str) -> str:
 
 
 def verify_remote(root: Path, repository: str) -> None:
-    actual = git(root, "remote", "get-url", "origin").stdout.strip()
-    if canonical(actual) != canonical(repository):
-        raise ValueError(
-            "origin이 교육용 저장소와 다릅니다. 연구원에게 확인을 요청하세요."
-        )
+    for args in (("origin",), ("--push", "origin")):
+        actual = git(root, "remote", "get-url", *args).stdout.strip()
+        if canonical(actual) != canonical(repository):
+            raise ValueError(
+                "origin의 가져오기·제출 주소가 교육용 저장소와 다릅니다. 연구원에게 확인을 요청하세요."
+            )
 
 
 def enroll(root: Path, cfg: dict, identifier: str) -> str:
@@ -94,6 +101,14 @@ def enroll(root: Path, cfg: dict, identifier: str) -> str:
             git(root, "switch", "-c", branch, "origin/main")
     cfg.update(participant=identifier, repository=cfg.get("repository", REPOSITORY))
     write_json(root / "config.json", cfg)
+    metric = root / "metrics/my_metric.json"
+    submitted = root / "submissions/metric.json"
+    if not metric.exists() and submitted.exists():
+        from .metrics import validate_metric
+
+        payload = json.loads(submitted.read_text(encoding="utf-8"))
+        validate_metric(payload["metric"])
+        write_json(metric, payload["metric"])
     return branch
 
 

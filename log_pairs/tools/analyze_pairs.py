@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def read_jsonl(path):
-    return [json.loads(s) for s in path.read_text().splitlines() if s.strip()]
+    return [json.loads(s) for s in path.read_text(encoding="utf-8").splitlines() if s.strip()]
 
 
 def digest(data):
@@ -25,7 +25,7 @@ def require(condition, message):
 def state(root, state_id):
     p = root / 'states' / (state_id + '.json')
     require(p.is_file(), 'Missing state ' + state_id)
-    data = json.loads(p.read_text())
+    data = json.loads(p.read_text(encoding="utf-8"))
     packed = json.dumps(data['files'], ensure_ascii=False, sort_keys=True, separators=(',', ':'))
     require(state_id == 's-' + digest(packed.encode())[:20], 'State inventory hash mismatch')
     objects={}
@@ -48,7 +48,7 @@ def cost(usage, prices):
 
 
 def analyze(root=ROOT):
-    manifest = json.loads((root / 'manifest.json').read_text())
+    manifest = json.loads((root / 'manifest.json').read_text(encoding="utf-8"))
     require(manifest['provenance']['kind'] == 'constructed', 'Dataset provenance must match its generation method')
     rows=[]; timelines={}; state_cache={}
     def checked(ref):
@@ -123,7 +123,7 @@ def analyze(root=ROOT):
             expected_read=[]
             for source in t.get('resources',[]):
                 require(before['files'][source['path']]==source['sha256'], 'Read target version mismatch')
-                body=(root/'objects'/(source['sha256']+'.txt')).read_text()
+                body=(root/'objects'/(source['sha256']+'.txt')).read_text(encoding="utf-8")
                 span=source['range']
                 selected=body if span=='full' else ''.join(body.splitlines(True)[span[0]-1:span[1]])
                 require(len(selected.encode())==source['bytes_returned'],'Read byte count mismatch')
@@ -144,7 +144,7 @@ def analyze(root=ROOT):
             previous=t['after']
         require(previous==harness[-1]['final_state'], 'Final state mismatch')
         final=checked(previous)
-        grade=json.loads((root/entry['grading_evidence']).read_text())
+        grade=json.loads((root/entry['grading_evidence']).read_text(encoding="utf-8"))
         require(grade['run_id']==entry['source_run_id'] and grade['source_sha256']==final['code_version'], 'Final artifact is not the graded source artifact')
         require(grade['status']=='passed', 'Final artifact has not passed grading')
         require(grade['suites']['regression']['passed']==110 and grade['suites']['coupon']['passed']==12, 'Unexpected common grading criteria')
@@ -157,7 +157,7 @@ def analyze(root=ROOT):
             if r['type']=='assistant.message' and r['request_id'] in fee_ids:
                 check_ids.update(r.get('check_ids',[]))
                 explanation_occurrences+=len(re.findall(r'\[C\d{2}\]',r['content']))
-        expected_ids={c['id'] for c in json.loads((root/'calculation_cases.json').read_text())['cases']}
+        expected_ids={c['id'] for c in json.loads((root/'calculation_cases.json').read_text(encoding="utf-8"))['cases']}
         require(check_ids==expected_ids,'Calculation check set differs across cases')
         fee_outputs=[]
         for t in tools:
@@ -165,8 +165,8 @@ def analyze(root=ROOT):
         if not fee_outputs:
             sha=final['files'].get('work/expected-fees.json')
             require(bool(sha),'Missing saved calculation result')
-            fee_outputs=json.loads((root/'objects'/(sha+'.txt')).read_text())
-        expected=[{'id':c['id'],'total':c['expected_total'],'coupon_status':c['expected_coupon_status']} for c in json.loads((root/'calculation_cases.json').read_text())['cases']]
+            fee_outputs=json.loads((root/'objects'/(sha+'.txt')).read_text(encoding="utf-8"))
+        expected=[{'id':c['id'],'total':c['expected_total'],'coupon_status':c['expected_coupon_status']} for c in json.loads((root/'calculation_cases.json').read_text(encoding="utf-8"))['cases']]
         require(fee_outputs==expected,'Calculation results differ from checked examples')
         row={'scenario':entry['scenario'],'label':entry['label'],'run_id':entry['run_id'],'success':True,**totals,
              'first_input_tokens':next(iter(completions.values()))['usage']['input_tokens'],
@@ -198,6 +198,7 @@ def table(headers, rows):
 
 def render(manifest,rows,timelines):
     body='<h1>실습 2 작업 기록</h1><p>같은 쿠폰 과제를 수행하는 네 작업 방식입니다. 실행 기록과 수집 기록을 같은 호출 ID로 연결해 확인합니다.</p>'
+    body+='<p><strong>재구성한 교육용 로그입니다.</strong> 토큰·시간은 모델값이며 실제 서버 사용량·소요 시간·청구액이 아닙니다. 성공 여부는 참조한 최종 코드의 채점 결과입니다.</p>'
     body+=table(['작업 방식','과제 결과','입력 토큰','출력 토큰','모델 호출','도구 호출','테스트','시간(초)','환산 비용(USD)'],[[r['label'],'통과',f"{r['input_tokens']:,}",f"{r['output_tokens']:,}",r['llm_calls'],r['tool_calls'],r['test_runs'],f"{r['elapsed_seconds']:.1f}",f"{r['estimated_cost']:.4f}"] for r in rows])
     body+='<p>각 사례의 작업 내역과 상태 변화를 확인한 뒤 평가 기준을 정합니다. <a href="materials.json">집계 재료</a>와 <a href="manifest.json">자료 메타데이터</a>를 함께 열 수 있습니다.</p>'
     for entry in manifest['runs']:
@@ -233,8 +234,8 @@ def main(root=ROOT):
         'model_seconds':'수집 기록에서 model.observed 구간의 시간 합계.',
         'tool_seconds':'수집 기록에서 tool.observed 구간의 시간 합계. 요청 전체 시간과 중복 합산하지 않음.',
     }
-    (root/'materials.json').write_text(json.dumps({'dataset_id':manifest['dataset_id'],'definitions':definitions,'runs':rows},ensure_ascii=False,indent=2)+'\n')
-    (root/'index.html').write_text(render(manifest,rows,timelines))
+    (root/'materials.json').write_text(json.dumps({'dataset_id':manifest['dataset_id'],'definitions':definitions,'runs':rows},ensure_ascii=False,indent=2)+'\n', encoding='utf-8')
+    (root/'index.html').write_text(render(manifest,rows,timelines), encoding="utf-8")
     for row in rows:
         print(json.dumps(row,ensure_ascii=False))
     print('Validated four pairs, derived materials, and rendered index.html')

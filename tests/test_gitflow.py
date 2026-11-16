@@ -73,7 +73,7 @@ class GitFlowTests(unittest.TestCase):
         self.assertEqual(
             [r["value"] for r in records[0]["results"]], [60, 120, 180, 240]
         )
-        self.assertIn("계산식", (self.teacher / "output/sharing.md").read_text())
+        self.assertIn("계산식", (self.teacher / "output/sharing.md").read_text(encoding="utf-8"))
 
     def test_mismatched_dataset_and_code_expressions_are_rejected(self):
         enroll(self.student, self.cfg, "p01")

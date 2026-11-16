@@ -65,9 +65,22 @@ class Study:
     notes: list[str]
     traces: dict[str, list[dict]] = dataclass_field(default_factory=dict)
     raw_logs: dict[str, Path] = dataclass_field(default_factory=dict)
+    provenance: dict = dataclass_field(default_factory=dict)
+    source_folder: Path | None = None
+
+
+def default_data(root: Path) -> Path:
+    """Use the bundled teaching records; retain explicit legacy data support."""
+    return root / ("log_pairs" if (root / "log_pairs").is_dir() else "data")
 
 
 def load_study(folder: Path) -> Study:
+    if (folder / "manifest.json").exists():
+        manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
+        if "runs" in manifest:
+            from .pairs import load_pairs
+
+            return load_pairs(folder)
     runs = jsonl(folder / "runs.jsonl")
     phases = jsonl(folder / "phases.jsonl")
     pricing = (

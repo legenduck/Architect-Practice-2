@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from practice2.gitflow import git
-from practice2.data import load_study
+from practice2.data import default_data, load_study
 from practice2.metrics import custom_metric, readiness, validate_metric
 from practice2.report import number
 
@@ -31,7 +31,7 @@ def collect(root: Path, output: Path) -> list[dict]:
         "origin",
         "+refs/heads/students/*:refs/remotes/origin/students/*",
     )
-    study = load_study(root / "data")
+    study = load_study(default_data(root))
     state = readiness(study)
     records = []
     refs = git(
@@ -72,12 +72,13 @@ def collect(root: Path, output: Path) -> list[dict]:
                     "데이터 버전이 다릅니다. 같은 자료로 다시 계산해야 합니다."
                 )
             if not state["class_ready"]:
-                raise ValueError("실제 실습 자료가 아직 준비되지 않았습니다.")
+                raise ValueError("실습 자료가 아직 준비되지 않았습니다.")
             values = custom_metric(study, metric)
             record["results"] = values
             if any(r["value"] is None for r in values):
                 raise ValueError("계산할 수 없는 측정값이 포함되어 있습니다.")
             record["status"] = "계산 확인"
+            record["provenance"] = study.provenance
         except (ValueError, KeyError, TypeError) as error:
             record["message"] = str(error)
         records.append(record)
@@ -92,6 +93,8 @@ def collect(root: Path, output: Path) -> list[dict]:
         "참가자 번호순으로 표시합니다. 계산 확인은 지표의 타당성에 대한 점수가 아닙니다. 평가 목적과 해석 근거를 함께 검토합니다.",
         "",
     ]
+    if study.provenance.get("kind") == "constructed":
+        md += ["제공 자료는 재구성한 교육용 로그입니다. 토큰·시간은 모델값이며 실제 사용량·소요 시간·청구액이 아닙니다. 최종 코드의 채점 결과만 근거로 연결됩니다.", ""]
     for record in records:
         metric = record["metric"] or {}
         md += [
@@ -136,6 +139,8 @@ def collect(root: Path, output: Path) -> list[dict]:
 
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--output", type=Path, default=ROOT / "output/sharing")
     a = p.parse_args()
