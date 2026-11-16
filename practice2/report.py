@@ -70,6 +70,11 @@ def render(study: Study, metric: dict | None = None) -> str:
     if study.runs and not state["all_tasks_successful"]:
         status += '<p class="notice">과제 성공률이 같다는 실습 도입 전제를 확인해야 합니다. 실패하거나 성공 여부가 미확인인 기록도 삭제하지 않고 포함합니다.</p>'
     body = "<h1>과정 지표로 Codex 작업 평가하기</h1>" + status
+    if study.provenance.get("kind") == "constructed":
+        body += ('<p class="notice"><b>재구성한 교육용 로그입니다.</b> 토큰·시간은 계산·가정한 모델값이며 '
+                 '실제 서버 사용량·소요 시간·청구액이 아닙니다. 성공 여부는 참조한 최종 코드의 채점 결과입니다. '
+                 '재구성한 작업 경로 전체를 실행했다는 뜻은 아닙니다.</p>'
+                 '<p><a href="log_pairs/index.html">네 작업 방식의 메시지·명령·반환값 살펴보기</a></p>')
     body += (
         "<p>실행 기록 "
         + str(len(study.runs))
@@ -115,6 +120,8 @@ def render(study: Study, metric: dict | None = None) -> str:
         ],
     )
     body += "<h2>작업 구간별 토큰과 시간</h2><p>구간 구분과 자원 배분의 근거를 함께 확인합니다. 자원을 많이 쓴 구간에서도 필요한 검증과 불필요한 반복을 구분해야 합니다.</p>"
+    if study.provenance.get("kind") == "constructed":
+        body += "<p>한 요청의 토큰과 전체 시간을 해당 activity에 배분합니다. 해당 문서나 도구만의 순수 비용이 아니며, 모델·도구 시간은 요청 시간과 중복 합산하지 않습니다.</p>"
     if not study.phases:
         body += '<p class="notice">구간별 기록이 없습니다. 실행 총량만으로 문서 조회, 추론, 테스트 등의 사용량을 나누어 계산하지 않습니다.</p>'
     seen_scenarios = set()
@@ -278,6 +285,15 @@ def render(study: Study, metric: dict | None = None) -> str:
                 ],
             )
         body += "<p>지표값이 달라졌다는 사실만으로 지표가 타당하다고 판단하지 않습니다. 어떤 작업 차이를 설명하며 담당 업무에 왜 필요한지 실행 기록과 연결해 해석합니다.</p>"
+    if study.provenance.get("kind") == "constructed":
+        body += "<h2>반복 조회·검증·금액 계산</h2><p>동일 조건의 반복 횟수만으로 불필요한 작업이라고 단정하지 않습니다. 로그의 목적과 상태 변화를 함께 확인하세요.</p>"
+        body += table(
+            ["작업 방식", "문서 조회", "동일 범위 재조회", "테스트 실행", "통과 후 동일 상태 재검증", "계산 도구 실행", "금액 사례 언급"],
+            [[SCENARIOS[r["scenario"]], *[number(r.get(k)) for k in (
+                "document_lookups", "same_document_range_lookups", "test_runs",
+                "same_state_passed_rechecks", "calculator_executions", "calculation_explanation_occurrences"
+            )]] for r in study.runs],
+        )
     body += (
         "<details><summary>지표 설계에 사용할 측정값</summary>"
         + table(
@@ -309,7 +325,7 @@ def render(study: Study, metric: dict | None = None) -> str:
         "<details><summary>단가와 자료 확인 상태</summary><pre>"
         + text(
             json.dumps(
-                {"pricing": study.pricing, "readiness": state},
+                {"pricing": study.pricing, "readiness": state, "provenance": study.provenance},
                 ensure_ascii=False,
                 indent=2,
             )
@@ -328,6 +344,23 @@ def render(study: Study, metric: dict | None = None) -> str:
 
 def write_report(study: Study, output: Path, metric: dict | None = None) -> Path:
     output.mkdir(parents=True, exist_ok=True)
+    if study.source_folder:
+        from log_pairs.tools.analyze_pairs import analyze, render as render_pairs
+
+        source = study.source_folder
+        destination = output / "log_pairs"
+        if destination.resolve().is_relative_to(source.resolve()):
+            raise ValueError("결과 폴더는 원본 log_pairs 밖으로 지정하세요.")
+        destination.mkdir(parents=True, exist_ok=True)
+        for name in ("cases", "states", "objects", "grading"):
+            shutil.copytree(source / name, destination / name, dirs_exist_ok=True)
+        for name in ("manifest.json", "task.md", "calculation_cases.json"):
+            shutil.copyfile(source / name, destination / name)
+        manifest, rows, timelines = analyze(source)
+        (destination / "materials.json").write_text(json.dumps({
+            "dataset_id": manifest["dataset_id"], "provenance": study.provenance, "runs": rows,
+        }, ensure_ascii=False, indent=2), encoding="utf-8")
+        (destination / "index.html").write_text(render_pairs(manifest, rows, timelines), encoding="utf-8")
     if study.raw_logs:
         records = output / "records"
         records.mkdir(exist_ok=True)

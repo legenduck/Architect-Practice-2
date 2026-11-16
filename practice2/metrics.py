@@ -7,6 +7,7 @@ import re
 import statistics
 
 from .data import MEASURES, SCENARIOS, Study
+from .pairs import PAIR_MEASURES
 
 
 def estimated_cost(run: dict, pricing: dict) -> float | None:
@@ -91,6 +92,7 @@ def readiness(study: Study) -> dict:
     raw_logs = bool(study.runs) and all(r["id"] in study.raw_logs for r in study.runs)
     return {
         "run_count": len(study.runs),
+        "dataset_kind": study.provenance.get("kind", "recorded"),
         "four_scenarios": present,
         "outcomes_available": outcomes,
         "cost_available": costs,
@@ -112,7 +114,7 @@ def readiness(study: Study) -> dict:
     }
 
 
-FIELDS = set(MEASURES) | {"success", "estimated_cost"}
+FIELDS = set(MEASURES) | set(PAIR_MEASURES) | {"success", "estimated_cost"}
 PHASE_MEASURES = {"input_tokens", "output_tokens", "elapsed_seconds"}
 OPS = {
     ast.Add: operator.add,

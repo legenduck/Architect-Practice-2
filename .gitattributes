@@ -1,0 +1,9 @@
+# Hash-addressed teaching records must retain the exact bytes on Windows too.
+log_pairs/cases/** -text
+log_pairs/states/** -text
+log_pairs/objects/** -text
+log_pairs/grading/** -text
+log_pairs/manifest.json -text
+log_pairs/task.md -text
+log_pairs/calculation_cases.json -text
+*.sh text eol=lf
