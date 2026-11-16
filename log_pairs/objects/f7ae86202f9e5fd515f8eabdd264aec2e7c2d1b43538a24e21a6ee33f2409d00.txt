@@ -1,0 +1,72 @@
+# parkfee — 한결파킹 주차요금 정산 엔진
+
+한결파킹이 운영하는 주차장의 **출차 요금 계산**과 **일일 정산 집계**를 담당하는 Python 라이브러리이자 명령줄 도구입니다.
+무인 정산기(키오스크), 한결파킹 앱 백엔드, 일일 정산 배치가 모두 이 엔진을 같은 버전으로 사용합니다.
+
+- 담당 조직: 정산플랫폼팀 (팀장 김민준)
+- 문의: 사내 메신저 `#parkfee` 채널
+- 현재 버전: 1.6.0 (2026-08-25 배포)
+
+## 운영 주차장
+
+| 주차장 ID | 이름 | 요금 방식 | 회차 시간 |
+|---|---|---|---|
+| HJ-01 | 한결타워 | 기본 30분 2,000원 + 10분당 500원, 일 최대 25,000원 | 10분 |
+| HJ-02 | 한결몰 | 기본 30분 1,500원 + 10분당 500원, 일 최대 30,000원 | 15분 |
+| HJ-03 | 한결역 환승주차장 | 24시간당 6,000원 정액 | 10분 |
+
+요금과 할인의 정확한 규칙은 운영 규정 문서가 기준입니다. 코드와 규정이 다르면 규정이 맞고 코드가 버그입니다.
+
+## 빠른 시작
+
+```bash
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+make check                         # 린트 + 타입 검사 + 테스트(커버리지)
+```
+
+사용 예:
+
+```bash
+# 출차 1건 정산 (한결타워, 경형 자동차, 멤버십 회원)
+parkfee calc --lot HJ-01 --plate 12가3456 \
+  --entry 2026-09-01T09:00 --exit 2026-09-01T11:05 \
+  --vehicle-type compact --member
+
+# 하루치 입출차 기록으로 정산 리포트 만들기
+parkfee batch data/samples/sessions_2026-09-01.csv --format json
+
+# 제휴 쿠폰 조회
+parkfee coupon show HJM-2609-0001
+```
+
+설치하지 않고 실행하려면 `PYTHONPATH=src python -m parkfee ...` 를 사용합니다.
+
+## 디렉터리 구조
+
+```
+src/parkfee/
+  domain/          엔터티와 값 객체 (Money, ParkingSession, Coupon, Receipt ...)
+  pricing/         요금 계산 방식, 할인 정책, 할인 파이프라인, 절사·부가세
+  application/     유스케이스 (출차 정산, 일일 정산)
+  infrastructure/  JSON·CSV 데이터 파일 저장소
+  presentation/    CLI와 출력 형식
+data/              요금표, 쿠폰, 정기권 데이터와 샘플 입출차 기록
+tests/             단위 테스트와 통합 테스트
+docs/              기획, 운영 규정, 법규, 아키텍처, 개발, 운영 문서
+```
+
+## 문서
+
+전체 문서 목록과 읽는 순서는 [docs/README.md](docs/README.md)를 참고하세요.
+처음 합류했다면 [온보딩 체크리스트](docs/records/onboarding-checklist.md)부터 보세요.
+
+## 기여
+
+브랜치 전략, 커밋 규칙, 리뷰 절차는 [CONTRIBUTING.md](CONTRIBUTING.md)를 따릅니다.
+요금·할인 규칙을 바꾸는 변경은 반드시 기획팀 승인을 받은 규정 개정본이 먼저 있어야 합니다.
+
+---
+
+※ 이 저장소는 교육용으로 만든 가상 프로젝트입니다. 등장하는 회사, 인물, 주차장, 쿠폰은 실제와 관계가 없습니다.

@@ -1,0 +1,29 @@
+"""차량 구분과 감면 구분."""
+
+from __future__ import annotations
+
+from enum import Enum
+
+
+class VehicleType(str, Enum):
+    """차종 구분. 경형·저공해 자동차는 감면 대상이다."""
+
+    GENERAL = "general"
+    COMPACT = "compact"
+    LOW_EMISSION = "low-emission"
+
+
+class ReductionType(str, Enum):
+    """신분에 따른 감면 구분."""
+
+    NONE = "none"
+    DISABLED = "disabled"
+    VETERAN = "veteran"
+
+
+REDUCTION_LABELS: dict[str, str] = {
+    ReductionType.DISABLED.value: "장애인",
+    ReductionType.VETERAN.value: "국가유공자",
+    VehicleType.COMPACT.value: "경형 자동차",
+    VehicleType.LOW_EMISSION.value: "저공해 자동차",
+}

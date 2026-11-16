@@ -1,0 +1,26 @@
+# 기여 가이드
+
+정산플랫폼팀 저장소에 변경을 올리는 절차입니다. 세부 규칙은 각 문서를 참고하세요.
+
+## 작업 흐름
+
+1. **이슈 확인**: 모든 작업은 이슈 번호가 있어야 합니다. 요금·할인 규칙 변경은 기획팀이 승인한 규정 개정본 링크가 이슈에 있어야 합니다.
+2. **브랜치 생성**: `feature/ISSUE-<번호>-<요약>` 형식 ([브랜치·커밋 규칙](docs/development/git-workflow.md)).
+3. **구현과 테스트**: [코딩 컨벤션](docs/development/coding-convention.md), [테스트 전략](docs/development/testing-strategy.md)을 따릅니다. 규정 조항을 구현한 코드에는 해당 조항을 테스트 docstring에 남깁니다.
+4. **로컬 검사**: `make check` 통과 (린트, 타입 검사, 커버리지 90% 이상).
+5. **PR 생성**: PR 템플릿의 체크리스트를 채웁니다.
+6. **리뷰**: 개발자 2명 승인. 요금·할인 계산이 바뀌면 기획팀 1명 추가 승인 ([코드 리뷰 가이드](docs/development/code-review.md)).
+7. **머지**: CI 통과 후 스쿼시 머지. 릴리즈는 [배포 절차](docs/operations/deployment.md)를 따릅니다.
+
+## 문서도 코드와 같이
+
+- CLI 옵션이나 JSON 출력이 바뀌면 [CLI 명세](docs/api/cli.md)를 같은 PR에서 고칩니다.
+- 데이터 파일 형식이 바뀌면 [데이터 모델](docs/architecture/data-model.md)을 고칩니다.
+- 구조적인 결정은 ADR로 남깁니다 (`docs/architecture/adr/`).
+- 사용자에게 보이는 변경은 `CHANGELOG.md`의 `Unreleased` 절에 적습니다.
+
+## 금지 사항
+
+- 금액을 `float`로 다루지 않습니다. 반드시 `Money`를 씁니다 ([ADR-002](docs/architecture/adr/ADR-002-money-value-object.md)).
+- 로그에 전체 차량번호를 남기지 않습니다 ([로깅·에러 처리](docs/development/logging-and-errors.md)).
+- 운영 데이터(`data/`의 실제 운영본)를 저장소에 올리지 않습니다. 저장소의 `data/`는 테스트·샘플용입니다.

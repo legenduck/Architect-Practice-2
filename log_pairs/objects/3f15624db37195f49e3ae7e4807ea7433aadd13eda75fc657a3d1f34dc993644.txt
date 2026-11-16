@@ -1,0 +1,140 @@
+"""JSON 데이터 파일 저장소.
+
+데이터 파일 스키마는 docs/architecture/data-model.md 를 따른다.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from collections.abc import Mapping
+from pathlib import Path
+from typing import Any
+
+from parkfee.domain.coupon import Coupon, CouponKind
+from parkfee.domain.errors import CouponNotFoundError, DataFileError, InvalidTimeFormatError
+from parkfee.domain.money import Money
+from parkfee.domain.season_pass import SeasonPass
+from parkfee.infrastructure.timeparse import parse_date, parse_datetime
+from parkfee.pricing.schedule import (
+    DailyFlatSchedule,
+    LotPolicy,
+    PricingConfig,
+    Schedule,
+    StandardSchedule,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def read_json(path: Path) -> Any:
+    try:
+        with path.open(encoding="utf-8") as stream:
+            data = json.load(stream)
+    except FileNotFoundError:
+        raise DataFileError(f"데이터 파일이 없습니다: {path}") from None
+    except json.JSONDecodeError as error:
+        raise DataFileError(f"JSON 형식 오류 {path}: {error.msg} (line {error.lineno})") from None
+    logger.debug("데이터 파일 읽음: %s", path)
+    return data
+
+
+def _require(record: Mapping[str, Any], key: str, path: Path) -> Any:
+    if key not in record:
+        raise DataFileError(f"{path}: 필수 항목 '{key}'가 없습니다.")
+    return record[key]
+
+
+class JsonPricingConfigLoader:
+    """fee_schedules.json 을 PricingConfig 로 읽는다."""
+
+    def load(self, path: Path) -> PricingConfig:
+        data = read_json(path)
+        lots = {}
+        for record in _require(data, "lots", path):
+            lot = self._parse_lot(record, path)
+            lots[lot.lot_id] = lot
+        return PricingConfig(
+            version=str(_require(data, "version", path)),
+            rounding_unit=int(_require(data, "rounding_unit", path)),
+            reduction_rates=dict(_require(data, "reduction_rates", path)),
+            lots=lots,
+        )
+
+    def _parse_lot(self, record: Mapping[str, Any], path: Path) -> LotPolicy:
+        return LotPolicy(
+            lot_id=_require(record, "lot_id", path),
+            name=_require(record, "name", path),
+            schedule=self._parse_schedule(_require(record, "charge", path), path),
+            grace_minutes=int(_require(record, "grace_minutes", path)),
+            membership_rate=int(_require(record, "membership_rate", path)),
+        )
+
+    @staticmethod
+    def _parse_schedule(record: Mapping[str, Any], path: Path) -> Schedule:
+        kind = _require(record, "type", path)
+        if kind == "standard":
+            return StandardSchedule(
+                base_minutes=int(_require(record, "base_minutes", path)),
+                base_fee=Money(int(_require(record, "base_fee", path))),
+                unit_minutes=int(_require(record, "unit_minutes", path)),
+                unit_fee=Money(int(_require(record, "unit_fee", path))),
+                daily_max=Money(int(_require(record, "daily_max", path))),
+            )
+        if kind == "daily-flat":
+            return DailyFlatSchedule(daily_fee=Money(int(_require(record, "daily_fee", path))))
+        raise DataFileError(f"{path}: 알 수 없는 요금 방식입니다: {kind}")
+
+
+class JsonCouponRepository:
+    """coupons.json 기반 쿠폰 저장소."""
+
+    def __init__(self, path: Path) -> None:
+        self._path = path
+
+    def find(self, code: str) -> Coupon:
+        for coupon in self.all():
+            if coupon.code == code:
+                return coupon
+        raise CouponNotFoundError(f"쿠폰을 찾을 수 없습니다: {code}")
+
+    def all(self) -> list[Coupon]:
+        return [self._parse(record) for record in read_json(self._path)]
+
+    def _parse(self, record: Mapping[str, Any]) -> Coupon:
+        try:
+            return Coupon(
+                code=_require(record, "code", self._path),
+                kind=CouponKind(_require(record, "kind", self._path)),
+                value=int(_require(record, "value", self._path)),
+                lot_id=_require(record, "lot_id", self._path),
+                partner=_require(record, "partner", self._path),
+                valid_from=parse_datetime(_require(record, "valid_from", self._path)),
+                valid_until=parse_datetime(_require(record, "valid_until", self._path)),
+            )
+        except (ValueError, InvalidTimeFormatError) as error:
+            raise DataFileError(f"{self._path}: 쿠폰 데이터 오류: {error}") from None
+
+
+class JsonSeasonPassRepository:
+    """season_passes.json 기반 정기권 저장소. 파일이 없으면 정기권이 없는 것으로 본다."""
+
+    def __init__(self, path: Path) -> None:
+        self._path = path
+
+    def find_by_plate(self, plate: str) -> list[SeasonPass]:
+        if not self._path.exists():
+            return []
+        passes = [self._parse(record) for record in read_json(self._path)]
+        return [season_pass for season_pass in passes if season_pass.plate == plate]
+
+    def _parse(self, record: Mapping[str, Any]) -> SeasonPass:
+        try:
+            return SeasonPass(
+                plate=_require(record, "plate", self._path),
+                lot_id=_require(record, "lot_id", self._path),
+                start_date=parse_date(_require(record, "start_date", self._path)),
+                end_date=parse_date(_require(record, "end_date", self._path)),
+            )
+        except InvalidTimeFormatError as error:
+            raise DataFileError(f"{self._path}: 정기권 데이터 오류: {error}") from None

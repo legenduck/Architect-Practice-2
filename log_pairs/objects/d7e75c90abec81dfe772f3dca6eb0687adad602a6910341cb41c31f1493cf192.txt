@@ -1,0 +1,50 @@
+{
+  "version": "2026-08-01",
+  "rounding_unit": 100,
+  "reduction_rates": {
+    "disabled": 50,
+    "veteran": 50,
+    "compact": 30,
+    "low-emission": 30
+  },
+  "lots": [
+    {
+      "lot_id": "HJ-01",
+      "name": "한결타워",
+      "charge": {
+        "type": "standard",
+        "base_minutes": 30,
+        "base_fee": 2000,
+        "unit_minutes": 10,
+        "unit_fee": 500,
+        "daily_max": 25000
+      },
+      "grace_minutes": 10,
+      "membership_rate": 10
+    },
+    {
+      "lot_id": "HJ-02",
+      "name": "한결몰",
+      "charge": {
+        "type": "standard",
+        "base_minutes": 30,
+        "base_fee": 1500,
+        "unit_minutes": 10,
+        "unit_fee": 500,
+        "daily_max": 30000
+      },
+      "grace_minutes": 15,
+      "membership_rate": 10
+    },
+    {
+      "lot_id": "HJ-03",
+      "name": "한결역 환승주차장",
+      "charge": {
+        "type": "daily-flat",
+        "daily_fee": 6000
+      },
+      "grace_minutes": 10,
+      "membership_rate": 0
+    }
+  ]
+}

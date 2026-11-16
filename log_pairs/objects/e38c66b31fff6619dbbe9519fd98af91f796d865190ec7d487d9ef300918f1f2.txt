@@ -1,0 +1,37 @@
+"""금액 값 객체(ADR-002)."""
+
+import pytest
+
+from parkfee.domain.money import Money
+
+
+def test_negative_amount_is_rejected() -> None:
+    with pytest.raises(ValueError):
+        Money(-1)
+
+
+def test_minus_never_goes_below_zero() -> None:
+    assert Money(1000).minus(Money(300)) == Money(700)
+    assert Money(1000).minus(Money(3000)) == Money.zero()
+
+
+def test_add_times_and_ordering() -> None:
+    assert Money(500) + Money(700) == Money(1200)
+    assert Money(500).times(3) == Money(1500)
+    assert min(Money(3000), Money(2500)) == Money(2500)
+
+
+def test_percent_discards_fraction_of_won() -> None:
+    assert Money(4095).percent(10) == Money(409)
+    assert Money(7000).percent(30) == Money(2100)
+
+
+def test_floor_to_unit() -> None:
+    assert Money(4410).floor_to(100) == Money(4400)
+    assert Money(4400).floor_to(100) == Money(4400)
+
+
+def test_display_and_zero() -> None:
+    assert str(Money(25000)) == "25,000원"
+    assert Money.zero().is_zero
+    assert not Money(1).is_zero

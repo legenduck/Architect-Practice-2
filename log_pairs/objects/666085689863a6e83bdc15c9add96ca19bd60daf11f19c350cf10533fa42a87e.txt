@@ -1,0 +1,65 @@
+"""요금 계산 방식(요금 규정 제6~8조, ADR-001)."""
+
+import pytest
+
+from parkfee.domain.money import Money
+from parkfee.pricing.charge import (
+    DailyFlatChargeStrategy,
+    StandardChargeStrategy,
+    create_charge_strategy,
+)
+from parkfee.pricing.schedule import DailyFlatSchedule, StandardSchedule
+
+TOWER_SCHEDULE = StandardSchedule(
+    base_minutes=30,
+    base_fee=Money(2000),
+    unit_minutes=10,
+    unit_fee=Money(500),
+    daily_max=Money(25000),
+)
+
+
+@pytest.mark.parametrize(
+    ("minutes", "expected"),
+    [
+        (0, 0),
+        (1, 2000),
+        (30, 2000),
+        (31, 2500),
+        (40, 2500),
+        (41, 3000),
+        (125, 7000),
+        (480, 24500),
+    ],
+)
+def test_base_fee_then_ten_minute_units(minutes: int, expected: int) -> None:
+    """제6조: 최초 30분 기본 요금, 이후 10분마다 단위 요금(10분 미만 올림)."""
+    assert StandardChargeStrategy(TOWER_SCHEDULE).charge(minutes) == Money(expected)
+
+
+@pytest.mark.parametrize(("minutes", "expected"), [(490, 25000), (600, 25000), (1439, 25000)])
+def test_daily_max_caps_a_day(minutes: int, expected: int) -> None:
+    """제7조: 하루(24시간) 요금은 일 최대 요금을 넘지 않는다."""
+    assert StandardChargeStrategy(TOWER_SCHEDULE).charge(minutes) == Money(expected)
+
+
+@pytest.mark.parametrize(
+    ("minutes", "expected"),
+    [(1440, 25000), (1441, 27000), (2 * 1440 + 125, 57000)],
+)
+def test_daily_max_restarts_every_24_hours_from_entry(minutes: int, expected: int) -> None:
+    """제7조: 입차 시각부터 24시간 단위로 일 최대 요금을 따로 적용한다."""
+    assert StandardChargeStrategy(TOWER_SCHEDULE).charge(minutes) == Money(expected)
+
+
+@pytest.mark.parametrize(("minutes", "expected"), [(0, 0), (1, 6000), (1440, 6000), (1441, 12000)])
+def test_daily_flat_charges_each_started_day(minutes: int, expected: int) -> None:
+    """제8조: 환승주차장은 시작된 24시간마다 정액을 부과한다."""
+    strategy = DailyFlatChargeStrategy(DailyFlatSchedule(daily_fee=Money(6000)))
+    assert strategy.charge(minutes) == Money(expected)
+
+
+def test_factory_picks_strategy_by_schedule_type() -> None:
+    assert isinstance(create_charge_strategy(TOWER_SCHEDULE), StandardChargeStrategy)
+    flat = create_charge_strategy(DailyFlatSchedule(daily_fee=Money(6000)))
+    assert isinstance(flat, DailyFlatChargeStrategy)

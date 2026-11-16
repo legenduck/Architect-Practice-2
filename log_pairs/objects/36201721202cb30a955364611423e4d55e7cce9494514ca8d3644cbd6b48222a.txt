@@ -1,0 +1,6 @@
+"""``python -m parkfee`` 진입점."""
+
+from parkfee.presentation.cli import main
+
+if __name__ == "__main__":
+    raise SystemExit(main())

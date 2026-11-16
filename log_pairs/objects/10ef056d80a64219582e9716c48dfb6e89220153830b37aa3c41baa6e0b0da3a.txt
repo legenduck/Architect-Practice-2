@@ -1,0 +1,46 @@
+# AGENTS.md
+
+이 저장소에서 작업하는 AI 에이전트의 작업 지침입니다. 필요한 문서는 아래 목록에서 골라 그때 읽으세요.
+
+## 프로젝트
+- parkfee: 한결파킹 주차요금 정산 엔진. Python 3.10 이상, 표준 라이브러리만 사용.
+- 요금·할인 계산의 기준은 운영 규정 문서(docs/policy)다. 규정이 회의록·FAQ·변경 이력보다 우선한다.
+
+## 기본 명령
+- 테스트: `python -m pytest -v -s --log-cli-level=DEBUG` (계산 과정 로그를 확인하며 테스트할 것)
+- 린트: `make lint`, 타입 검사: `make typecheck`
+- 변경 후에는 항상 전체 테스트를 다시 실행하고 로그를 확인할 것
+
+## 코드 지도
+| 위치 | 내용 |
+|---|---|
+| src/parkfee/domain/ | 엔터티·값 객체: Money, ParkingSession, Coupon, SeasonPass, Receipt, 오류 코드 |
+| src/parkfee/pricing/ | 요금 계산 방식(ChargeStrategy), 할인 정책(DiscountPolicy), 할인 파이프라인, 절사·부가세 |
+| src/parkfee/application/ | 출차 정산(CheckoutService), 일일 정산 |
+| src/parkfee/infrastructure/ | JSON·CSV 저장소 |
+| src/parkfee/presentation/ | CLI(cli.py), 출력 형식(formatters.py) |
+| tests/unit/, tests/integration/ | 단위 테스트, CLI 통합 테스트 |
+
+## 문서 목록 (필요할 때 해당 문서만 읽을 것)
+| 문서 | 언제 읽나 |
+|---|---|
+| docs/policy/fee-policy.md | 요금 계산, 회차, 일 최대 요금, 절사, 부가세 |
+| docs/policy/discount-policy.md | 감면, 멤버십, 제휴 쿠폰 적용 규칙 (쿠폰은 제5장) |
+| docs/policy/season-pass-policy.md | 정기권 |
+| docs/architecture/overview.md | 계층 구조, 의존 규칙, 새 정책·모듈 추가 방법 |
+| docs/architecture/data-model.md | 데이터 파일(JSON·CSV) 형식 |
+| docs/api/cli.md | CLI 옵션과 JSON 출력 형식 |
+| docs/development/coding-convention.md | 코드 작성 규칙 |
+| docs/development/testing-strategy.md | 테스트 작성 기준 |
+| docs/development/logging-and-errors.md | 로그 규칙, 오류 코드 |
+| docs/README.md | 그 밖의 모든 문서 목록 |
+
+## 꼭 지킬 것
+- 금액은 Money 값 객체로만 다룬다.
+- 규정 수치를 코드에 상수로 쓰지 않는다 (data/fee_schedules.json에서 읽는다).
+- 로그에 차량번호 전체를 남기지 않는다.
+
+## 이 실행의 작업 절차
+- 소스 파일 하나를 수정한 뒤에는 해당 작업에서 참조한 운영 규정 문서를 처음부터 다시 읽는다.
+- 다음 파일을 수정하기 전에 전체 테스트를 다시 실행하고 상세 출력을 확인한다.
+- 앞에서 읽은 문서와 확인한 테스트 결과가 있더라도 파일별로 같은 확인을 반복한다.

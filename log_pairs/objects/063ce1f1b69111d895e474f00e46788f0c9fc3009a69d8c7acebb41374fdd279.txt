@@ -1,0 +1,57 @@
+"""주차장별 요금표와 전사 공통 설정(ADR-004)."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+
+from parkfee.domain.errors import UnknownLotError
+from parkfee.domain.money import Money
+
+
+@dataclass(frozen=True)
+class StandardSchedule:
+    """기본 요금 + 단위 요금 + 일 최대 요금 방식(요금 규정 제6~7조)."""
+
+    base_minutes: int
+    base_fee: Money
+    unit_minutes: int
+    unit_fee: Money
+    daily_max: Money
+
+
+@dataclass(frozen=True)
+class DailyFlatSchedule:
+    """24시간 단위 정액 방식(요금 규정 제8조, 환승주차장)."""
+
+    daily_fee: Money
+
+
+Schedule = StandardSchedule | DailyFlatSchedule
+
+
+@dataclass(frozen=True)
+class LotPolicy:
+    """주차장 1곳의 요금 정책."""
+
+    lot_id: str
+    name: str
+    schedule: Schedule
+    grace_minutes: int
+    membership_rate: int
+
+
+@dataclass(frozen=True)
+class PricingConfig:
+    """fee_schedules.json 전체. 감면율과 절사 단위는 전 주차장 공통이다."""
+
+    version: str
+    rounding_unit: int
+    reduction_rates: Mapping[str, int]
+    lots: Mapping[str, LotPolicy] = field(default_factory=dict)
+
+    def lot(self, lot_id: str) -> LotPolicy:
+        try:
+            return self.lots[lot_id]
+        except KeyError:
+            raise UnknownLotError(f"등록되지 않은 주차장입니다: {lot_id}") from None

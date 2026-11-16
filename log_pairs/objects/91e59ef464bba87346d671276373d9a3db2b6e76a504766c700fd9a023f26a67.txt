@@ -1,0 +1,55 @@
+"""입출차 기록 CSV."""
+
+from pathlib import Path
+
+import pytest
+
+from parkfee.domain.errors import DataFileError
+from parkfee.domain.vehicle import ReductionType, VehicleType
+from parkfee.infrastructure.csv_sessions import CsvSessionReader
+from tests.conftest import REPO_ROOT
+
+SAMPLE = REPO_ROOT / "data" / "samples" / "sessions_2026-09-01.csv"
+
+
+def test_reads_sample_file() -> None:
+    sessions = CsvSessionReader().read(SAMPLE)
+    assert len(sessions) == 16
+    member = sessions[3]
+    assert member.vehicle_type is VehicleType.COMPACT
+    assert member.is_member
+
+
+def test_optional_columns_have_defaults(tmp_path: Path) -> None:
+    path = tmp_path / "s.csv"
+    path.write_text(
+        "lot_id,plate,entry_at,exit_at\nHJ-01,12가3456,2026-09-01T09:00,2026-09-01T10:00\n",
+        encoding="utf-8",
+    )
+    (session,) = CsvSessionReader().read(path)
+    assert session.vehicle_type is VehicleType.GENERAL
+    assert session.reduction is ReductionType.NONE
+    assert not session.is_member
+
+
+def test_missing_required_column(tmp_path: Path) -> None:
+    path = tmp_path / "s.csv"
+    path.write_text("lot_id,plate,entry_at\nHJ-01,12가3456,2026-09-01T09:00\n", encoding="utf-8")
+    with pytest.raises(DataFileError, match="exit_at"):
+        CsvSessionReader().read(path)
+
+
+def test_bad_row_reports_line_number(tmp_path: Path) -> None:
+    path = tmp_path / "s.csv"
+    path.write_text(
+        "lot_id,plate,entry_at,exit_at,vehicle_type\n"
+        "HJ-01,12가3456,2026-09-01T09:00,2026-09-01T10:00,truck\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(DataFileError, match="2번째 줄"):
+        CsvSessionReader().read(path)
+
+
+def test_missing_file(tmp_path: Path) -> None:
+    with pytest.raises(DataFileError):
+        CsvSessionReader().read(tmp_path / "none.csv")

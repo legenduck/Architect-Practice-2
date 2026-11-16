@@ -2,7 +2,22 @@
 
 실습 1의 쿠폰 기능 추가 과제를 수행한 기록을 지표별로 비교하고, 담당 업무에 맞는 과정 평가 지표를 설계합니다. 이론 2에서 다룬 낭비 사례 세 가지와 기법 적용 사례를 같은 데이터로 평가합니다.
 
-**현재 실제 실행 기록은 아직 등록되지 않았습니다. 지표 비교 실습은 데이터 배포 후 진행할 수 있습니다.**
+**[작업 기록 묶음](log_pairs/README.md)이 준비되어 있습니다.** 네 작업 방식마다 `codex.jsonl`과 `harness.jsonl`이 있으며, 같은 실행 ID와 호출 ID로 연결됩니다. 미리보기, 집계 재료, 파일 상태와 최종 코드의 채점 근거를 함께 제공합니다.
+
+## 작업 기록 열기
+
+```bash
+git clone https://github.com/legenduck/Architect-Practice-2.git
+cd Architect-Practice-2
+python log_pairs/analyze.py
+```
+
+`log_pairs/index.html`을 로컬 브라우저에서 엽니다. Python 3.10 이상이며 추가 패키지나 모델 호출은 필요하지 않습니다.
+
+- [두 로그의 구조와 읽는 방법](log_pairs/README.md)
+- [네 작업 방식의 로그 파일](log_pairs/cases/)
+- [지표 설계에 사용할 집계 재료](log_pairs/materials.json)
+- [자료 메타데이터](log_pairs/manifest.json)
 
 ## 진행 순서
 
@@ -10,6 +25,11 @@
 |---|---|
 | 15:30–16:30 | 제공된 지표 확인, 업무에 맞는 지표 설계와 적용 |
 | 16:30–17:00 | 지표가 드러낸 차이와 업무에서 필요한 이유 공유 |
+
+<details>
+<summary>기존 data/ 형식 분석 도구 사용법</summary>
+
+아래 `lab.py` 명령은 `data/` 형식의 자료에 사용하는 별도 분석 도구입니다. 위의 로그 쌍은 `python log_pairs/analyze.py`로 확인합니다.
 
 ## 시작하기
 
@@ -76,3 +96,5 @@ python lab.py submit --metric metrics/my_metric.json
 - [강의용 슬라이드](slides/practice2-presenter.html)
 - [지표 설계 안내](docs/metric-design.md)
 - [데이터 항목과 측정 기준](data/README.md)
+
+</details>

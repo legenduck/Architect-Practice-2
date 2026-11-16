@@ -1,0 +1,263 @@
+{
+  "cases": [
+    {
+      "id": "C01",
+      "lot": "HJ-02",
+      "minutes": 660,
+      "coupon": "HJM-2609-0002",
+      "member": false,
+      "vehicle": "general",
+      "description": "시간 쿠폰과 일 최대 요금",
+      "expected_total": 27000,
+      "expected_coupon_status": "applied"
+    },
+    {
+      "id": "C02",
+      "lot": "HJ-02",
+      "minutes": 120,
+      "coupon": "HJM-2609-0003",
+      "member": false,
+      "vehicle": "general",
+      "description": "금액 쿠폰",
+      "expected_total": 5000,
+      "expected_coupon_status": "applied"
+    },
+    {
+      "id": "C03",
+      "lot": "HJ-02",
+      "minutes": 120,
+      "coupon": "HJM-2609-0003",
+      "member": true,
+      "vehicle": "compact",
+      "description": "쿠폰과 감면 및 회원 할인 비교",
+      "expected_total": 3700,
+      "expected_coupon_status": "unused"
+    },
+    {
+      "id": "C04",
+      "lot": "HJ-02",
+      "minutes": 10,
+      "coupon": "HJM-2609-0001",
+      "member": false,
+      "vehicle": "general",
+      "description": "회차 무료 출차",
+      "expected_total": 0,
+      "expected_coupon_status": "unused"
+    },
+    {
+      "id": "C05",
+      "lot": "HJ-02",
+      "minutes": 60,
+      "coupon": "HJM-2608-0107",
+      "member": false,
+      "vehicle": "general",
+      "description": "출차 시각에 만료된 쿠폰",
+      "expected_total": 3000,
+      "expected_coupon_status": "expired"
+    },
+    {
+      "id": "C06",
+      "lot": "HJ-02",
+      "minutes": 120,
+      "coupon": "HJM-2609-0002",
+      "member": false,
+      "vehicle": "general",
+      "description": "쿠폰 차감 후 남은 시간이 0분",
+      "expected_total": 0,
+      "expected_coupon_status": "applied"
+    },
+    {
+      "id": "C07",
+      "lot": "HJ-01",
+      "minutes": 30,
+      "coupon": "HJT-2609-0001",
+      "member": false,
+      "vehicle": "general",
+      "description": "타워 시간 쿠폰",
+      "expected_total": 0,
+      "expected_coupon_status": "applied"
+    },
+    {
+      "id": "C08",
+      "lot": "HJ-02",
+      "minutes": 190,
+      "coupon": "HJM-2609-0003",
+      "member": true,
+      "vehicle": "general",
+      "description": "절사 후 같은 금액이면 쿠폰 반환",
+      "expected_total": 8500,
+      "expected_coupon_status": "unused"
+    }
+  ],
+  "answer_evidence": {
+    "reference": [
+      {
+        "id": "C01",
+        "total": 27000,
+        "coupon_status": "applied"
+      },
+      {
+        "id": "C02",
+        "total": 5000,
+        "coupon_status": "applied"
+      },
+      {
+        "id": "C03",
+        "total": 3700,
+        "coupon_status": "unused"
+      },
+      {
+        "id": "C04",
+        "total": 0,
+        "coupon_status": "unused"
+      },
+      {
+        "id": "C05",
+        "total": 3000,
+        "coupon_status": "expired"
+      },
+      {
+        "id": "C06",
+        "total": 0,
+        "coupon_status": "applied"
+      },
+      {
+        "id": "C07",
+        "total": 0,
+        "coupon_status": "applied"
+      },
+      {
+        "id": "C08",
+        "total": 8500,
+        "coupon_status": "unused"
+      }
+    ],
+    "context_overload": [
+      {
+        "id": "C01",
+        "total": 27000,
+        "coupon_status": "applied"
+      },
+      {
+        "id": "C02",
+        "total": 5000,
+        "coupon_status": "applied"
+      },
+      {
+        "id": "C03",
+        "total": 3700,
+        "coupon_status": "unused"
+      },
+      {
+        "id": "C04",
+        "total": 0,
+        "coupon_status": "unused"
+      },
+      {
+        "id": "C05",
+        "total": 3000,
+        "coupon_status": "expired"
+      },
+      {
+        "id": "C06",
+        "total": 0,
+        "coupon_status": "applied"
+      },
+      {
+        "id": "C07",
+        "total": 0,
+        "coupon_status": "applied"
+      },
+      {
+        "id": "C08",
+        "total": 8500,
+        "coupon_status": "unused"
+      }
+    ],
+    "repeated_work": [
+      {
+        "id": "C01",
+        "total": 27000,
+        "coupon_status": "applied"
+      },
+      {
+        "id": "C02",
+        "total": 5000,
+        "coupon_status": "applied"
+      },
+      {
+        "id": "C03",
+        "total": 3700,
+        "coupon_status": "unused"
+      },
+      {
+        "id": "C04",
+        "total": 0,
+        "coupon_status": "unused"
+      },
+      {
+        "id": "C05",
+        "total": 3000,
+        "coupon_status": "expired"
+      },
+      {
+        "id": "C06",
+        "total": 0,
+        "coupon_status": "applied"
+      },
+      {
+        "id": "C07",
+        "total": 0,
+        "coupon_status": "applied"
+      },
+      {
+        "id": "C08",
+        "total": 8500,
+        "coupon_status": "unused"
+      }
+    ],
+    "reasoning_reliance": [
+      {
+        "id": "C01",
+        "total": 27000,
+        "coupon_status": "applied"
+      },
+      {
+        "id": "C02",
+        "total": 5000,
+        "coupon_status": "applied"
+      },
+      {
+        "id": "C03",
+        "total": 3700,
+        "coupon_status": "unused"
+      },
+      {
+        "id": "C04",
+        "total": 0,
+        "coupon_status": "unused"
+      },
+      {
+        "id": "C05",
+        "total": 3000,
+        "coupon_status": "expired"
+      },
+      {
+        "id": "C06",
+        "total": 0,
+        "coupon_status": "applied"
+      },
+      {
+        "id": "C07",
+        "total": 0,
+        "coupon_status": "applied"
+      },
+      {
+        "id": "C08",
+        "total": 8500,
+        "coupon_status": "unused"
+      }
+    ]
+  },
+  "basis": "동일한 8개 입력을 실제 최종 구현 네 개에서 재실행해 금액과 쿠폰 상태의 일치를 확인함"
+}

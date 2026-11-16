@@ -1,0 +1,20 @@
+PYTHON ?= python
+
+.PHONY: install test cov lint typecheck check
+
+install:
+	$(PYTHON) -m pip install -e ".[dev]"
+
+test:
+	$(PYTHON) -m pytest -q
+
+cov:
+	$(PYTHON) -m pytest -q --cov=parkfee --cov-report=term-missing
+
+lint:
+	$(PYTHON) -m ruff check src tests
+
+typecheck:
+	$(PYTHON) -m mypy src
+
+check: lint typecheck cov

@@ -1,0 +1,129 @@
+"""제휴 쿠폰 출차 정산의 운영 규정과 CLI 계약."""
+
+import json
+from datetime import datetime, timedelta
+
+import pytest
+
+from parkfee.application.checkout import CheckoutService
+from parkfee.domain.coupon import Coupon, CouponKind
+from parkfee.domain.money import Money
+from parkfee.domain.receipt import CouponStatus
+from parkfee.domain.season_pass import SeasonPass
+from parkfee.domain.vehicle import VehicleType
+from parkfee.infrastructure.data_dir import DataDirectory
+from parkfee.presentation.cli import main
+from parkfee.pricing.schedule import PricingConfig
+from tests.conftest import FakeSeasonPassRepository, SessionFactory
+
+
+def coupon(kind: CouponKind = CouponKind.TIME, value: int = 120, **changes: object) -> Coupon:
+    fields = dict(
+        code="TEST",
+        kind=kind,
+        value=value,
+        lot_id="HJ-02",
+        partner="매장",
+        valid_from=datetime(2026, 9, 1),
+        valid_until=datetime(2026, 9, 30),
+    )
+    fields.update(changes)
+    return Coupon(**fields)
+
+
+def test_time_coupon_before_daily_cap(
+    pricing_config: PricingConfig, make_session: SessionFactory
+) -> None:
+    receipt = CheckoutService(pricing_config, FakeSeasonPassRepository()).checkout(
+        make_session(660, lot_id="HJ-02"), coupon()
+    )
+    assert receipt.charge == Money(30000)
+    assert receipt.total == Money(27000)
+    assert receipt.coupon is not None and receipt.coupon.status is CouponStatus.APPLIED
+    assert receipt.discount_total == Money(3000)
+
+
+def test_coupon_competes_with_discounts_and_ties_returned(
+    pricing_config: PricingConfig, make_session: SessionFactory
+) -> None:
+    service = CheckoutService(pricing_config, FakeSeasonPassRepository())
+    session = make_session(120, lot_id="HJ-02", vehicle_type=VehicleType.COMPACT, is_member=True)
+    result = service.checkout(session, coupon(CouponKind.AMOUNT, 1000))
+    assert result.total == Money(3700)
+    assert result.coupon is not None and result.coupon.status is CouponStatus.UNUSED
+    tie = service.checkout(
+        make_session(120, lot_id="HJ-02", is_member=True), coupon(CouponKind.AMOUNT, 550)
+    )
+    assert tie.total == Money(5400)
+    assert tie.coupon is not None and tie.coupon.status is CouponStatus.UNUSED
+    applied = service.checkout(session, coupon(CouponKind.AMOUNT, 10000))
+    assert applied.total == Money.zero()
+    assert applied.coupon is not None and applied.coupon.status is CouponStatus.APPLIED
+    assert len(applied.discounts) == 1
+
+
+@pytest.mark.parametrize(
+    "offset,status",
+    [
+        (-1, CouponStatus.UNUSED),
+        (0, CouponStatus.APPLIED),
+        (3600, CouponStatus.APPLIED),
+        (3601, CouponStatus.EXPIRED),
+    ],
+)
+def test_validity_at_exit(
+    pricing_config: PricingConfig, make_session: SessionFactory, offset: int, status: CouponStatus
+) -> None:
+    start = datetime(2026, 9, 15, 10)
+    ticket = coupon(
+        CouponKind.AMOUNT, 1000, valid_from=start, valid_until=start + timedelta(hours=1)
+    )
+    session = make_session(
+        120, lot_id="HJ-02", entry_at=start + timedelta(seconds=offset, hours=-2)
+    )
+    result = CheckoutService(pricing_config, FakeSeasonPassRepository()).checkout(session, ticket)
+    assert result.coupon is not None and result.coupon.status is status
+
+
+def test_grace_season_pass_and_wrong_lot_return_coupon(
+    pricing_config: PricingConfig, make_session: SessionFactory
+) -> None:
+    passes = FakeSeasonPassRepository(
+        [SeasonPass("34나5678", "HJ-02", datetime(2026, 9, 1).date(), datetime(2026, 9, 30).date())]
+    )
+    service = CheckoutService(pricing_config, passes)
+    for session in (
+        make_session(15, lot_id="HJ-02"),
+        make_session(120, lot_id="HJ-02", plate="34나5678"),
+        make_session(120, lot_id="HJ-01"),
+    ):
+        result = service.checkout(session, coupon())
+        assert result.coupon is not None and result.coupon.status is CouponStatus.UNUSED
+
+
+def test_cli_coupon_output_and_unknown_code(
+    data_dir: DataDirectory, capsys: pytest.CaptureFixture[str]
+) -> None:
+    args = [
+        "--data-dir",
+        str(data_dir.root),
+        "calc",
+        "--lot",
+        "HJ-02",
+        "--plate",
+        "12가3456",
+        "--entry",
+        "2026-09-15T09:00",
+        "--exit",
+        "2026-09-15T11:00",
+    ]
+    assert main(args + ["--format", "json"]) == 0
+    assert json.loads(capsys.readouterr().out)["coupon"] is None
+    assert main(args + ["--coupon", "HJM-2609-0001", "--format", "json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["coupon"] == {"code": "HJM-2609-0001", "status": "applied"}
+    assert result["total"] == 3000
+    assert main(args + ["--coupon", "HJM-2609-0001"]) == 0
+    assert "HJM-2609-0001 (사용)" in capsys.readouterr().out
+    assert main(args + ["--coupon", "NOPE"]) == 3
+    assert "E2001" in capsys.readouterr().err

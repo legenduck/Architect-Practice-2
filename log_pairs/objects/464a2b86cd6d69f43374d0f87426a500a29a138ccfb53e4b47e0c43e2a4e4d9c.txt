@@ -1,0 +1,141 @@
+"""CLI 통합 테스트(docs/api/cli.md). 실제 data/ 복사본으로 명령을 실행한다."""
+
+from __future__ import annotations
+
+import json
+import runpy
+import sys
+
+import pytest
+
+from parkfee.infrastructure.data_dir import DataDirectory
+from parkfee.presentation.cli import main
+from tests.conftest import REPO_ROOT
+
+SAMPLE_CSV = str(REPO_ROOT / "data" / "samples" / "sessions_2026-09-01.csv")
+
+
+def _calc_args(data_dir: DataDirectory, *extra: str) -> list[str]:
+    return [
+        "--data-dir",
+        str(data_dir.root),
+        "calc",
+        "--lot",
+        "HJ-01",
+        "--plate",
+        "12가3456",
+        "--entry",
+        "2026-09-01T09:00",
+        "--exit",
+        "2026-09-01T11:05",
+        *extra,
+    ]
+
+
+def test_calc_text(data_dir: DataDirectory, capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(_calc_args(data_dir, "--vehicle-type", "compact", "--member")) == 0
+    assert "결제금액 : 4,400원" in capsys.readouterr().out
+
+
+def test_calc_json(data_dir: DataDirectory, capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(_calc_args(data_dir, "--format", "json")) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["total"] == 7000
+
+
+def test_calc_season_pass_from_data_file(
+    data_dir: DataDirectory, capsys: pytest.CaptureFixture[str]
+) -> None:
+    args = _calc_args(data_dir, "--format", "json")
+    args[args.index("12가3456")] = "34나5678"
+    assert main(args) == 0
+    assert json.loads(capsys.readouterr().out)["season_pass"] is True
+
+
+def test_batch_report(data_dir: DataDirectory, capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["--data-dir", str(data_dir.root), "batch", SAMPLE_CSV, "--format", "json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["total_sessions"] == 16
+    assert payload["total_revenue"] == 79900
+
+
+def test_coupon_show(data_dir: DataDirectory, capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["--data-dir", str(data_dir.root), "coupon", "show", "HJM-2609-0002"]) == 0
+    assert "한결마트 무료 주차 120분" in capsys.readouterr().out
+
+
+def test_data_dir_from_environment(
+    data_dir: DataDirectory,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("PARKFEE_DATA_DIR", str(data_dir.root))
+    assert main(["coupon", "show", "HJT-2609-0001", "--format", "json"]) == 0
+    assert json.loads(capsys.readouterr().out)["lot_id"] == "HJ-01"
+
+
+@pytest.mark.parametrize(
+    ("replace", "code"),
+    [(("HJ-01", "HJ-99"), "E1003"), (("2026-09-01T11:05", "11시"), "E1002")],
+)
+def test_input_errors_exit_with_3(
+    data_dir: DataDirectory,
+    capsys: pytest.CaptureFixture[str],
+    replace: tuple[str, str],
+    code: str,
+) -> None:
+    args = _calc_args(data_dir)
+    args[args.index(replace[0])] = replace[1]
+    assert main(args) == 3
+    assert code in capsys.readouterr().err
+
+
+def test_unknown_coupon_exits_with_3(
+    data_dir: DataDirectory, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["--data-dir", str(data_dir.root), "coupon", "show", "NOPE"]) == 3
+    assert "E2001" in capsys.readouterr().err
+
+
+def test_missing_data_dir_exits_with_4(capsys: pytest.CaptureFixture[str]) -> None:
+    args = ["--data-dir", "/nonexistent", "calc", "--lot", "HJ-01", "--plate", "1가1111"]
+    args += ["--entry", "2026-09-01T09:00", "--exit", "2026-09-01T10:00"]
+    assert main(args) == 4
+    assert "E3001" in capsys.readouterr().err
+
+
+def test_version_option(capsys: pytest.CaptureFixture[str]) -> None:
+    with pytest.raises(SystemExit) as exit_info:
+        main(["--version"])
+    assert exit_info.value.code == 0
+    assert "parkfee 1.6.0" in capsys.readouterr().out
+
+
+def test_module_entry_point(
+    data_dir: DataDirectory,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["parkfee", "--data-dir", str(data_dir.root), "coupon", "show", "HJM-2609-0001"],
+    )
+    with pytest.raises(SystemExit) as exit_info:
+        runpy.run_module("parkfee", run_name="__main__")
+    assert exit_info.value.code == 0
+    assert "한결시네마" in capsys.readouterr().out
+
+
+def test_calc_coupon_output_and_unknown_code(
+    data_dir: DataDirectory, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(_calc_args(data_dir, "--format", "json")) == 0
+    assert json.loads(capsys.readouterr().out)["coupon"] is None
+    assert main(_calc_args(data_dir, "--coupon", "HJT-2609-0001", "--format", "json")) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["coupon"] == {"code": "HJT-2609-0001", "status": "applied"}
+    assert main(_calc_args(data_dir, "--coupon", "HJT-2609-0001")) == 0
+    assert "HJT-2609-0001 (applied)" in capsys.readouterr().out
+    assert main(_calc_args(data_dir, "--coupon", "NOPE")) == 3
+    assert "E2001" in capsys.readouterr().err

@@ -1,0 +1,92 @@
+# 아키텍처 개요
+
+| 항목 | 내용 |
+|---|---|
+| 문서 번호 | ARC-OVW-001 |
+| 버전 | 1.6 (2026-08-25, parkfee 1.6.0 기준) |
+| 작성 | 김민준 (정산플랫폼팀) |
+| 검토 | 송다은, 임재현 (정산플랫폼팀) |
+
+## 1. 품질 목표
+
+| 우선순위 | 품질 속성 | 이유와 대응 |
+|---|---|---|
+| 1 | 정확성 | 정산 금액 오차는 바로 고객 민원과 매출 손실이 된다. 금액은 정수 원 단위 값 객체(Money)로만 계산하고, 규정 조항별 테스트를 둔다. |
+| 2 | 변경 용이성 | 요금·할인 규정은 1년에 여러 번 바뀐다. 요금표·감면율은 데이터 파일로 분리하고(ADR-004), 계산 규칙은 교체 가능한 정책 객체로 둔다(ADR-001, ADR-003). |
+| 3 | 테스트 용이성 | 계산 로직은 파일·시계·네트워크에 의존하지 않는다. 저장소는 인터페이스로 주입한다. |
+| 4 | 이식성 | 정산기 펌웨어 번들(Python 3.10)에서 동작해야 하므로 표준 라이브러리만 쓴다. |
+
+## 2. 계층 구조
+
+```
+presentation   CLI(argparse), 출력 형식(text/json)
+     │
+application    유스케이스: CheckoutService(출차 정산), DailySettlementService(일일 정산)
+     │                      ports.py: 저장소 인터페이스
+     ├──────────────┐
+pricing          infrastructure
+요금 방식·할인 정책    JSON·CSV 저장소, 설정 로더 (ports 구현)
+     │              │
+domain   엔터티와 값 객체: Money, ParkingSession, Coupon, SeasonPass, Receipt, 오류
+```
+
+### 의존 규칙
+- `domain`은 어떤 계층에도 의존하지 않는다.
+- `pricing`은 `domain`에만 의존한다.
+- `application`은 `domain`, `pricing`, 그리고 `application/ports.py`의 인터페이스에만 의존한다. 파일 형식을 알지 못한다.
+- `infrastructure`는 `domain`, `pricing`(설정 타입)에 의존하며 ports를 구현한다.
+- `presentation`은 조립 지점(composition root)이다. 저장소 구현을 만들어 유스케이스에 주입한다.
+
+## 3. 모듈 지도
+
+| 모듈 | 책임 |
+|---|---|
+| `domain/money.py` | 금액 값 객체. 음수 금지, 차감 시 0원 하한, 비율 계산 시 원 미만 버림 |
+| `domain/session.py` | 주차 세션과 주차 시간(분) 산정 |
+| `domain/coupon.py` | 제휴 쿠폰 엔터티 (종류, 값, 발급 주차장, 유효기간) |
+| `domain/season_pass.py` | 정기권과 적용 여부 판단 |
+| `domain/receipt.py` | 정산 결과(영수증)와 적용 할인 내역 |
+| `domain/errors.py` | 오류 코드가 있는 예외 |
+| `pricing/schedule.py` | 주차장별 요금 정책(LotPolicy)과 전사 설정(PricingConfig) |
+| `pricing/charge.py` | 요금 계산 방식 Strategy: 시간제, 정액제 |
+| `pricing/discount.py` | 할인 정책 Strategy: 감면, 멤버십 |
+| `pricing/pipeline.py` | 할인 정책을 순서대로 누적 적용하는 파이프라인 |
+| `pricing/rounding.py` | 절사와 부가세 분리 |
+| `application/checkout.py` | 출차 정산 유스케이스 |
+| `application/settlement.py` | 일일 정산 집계 |
+| `infrastructure/json_store.py` | 요금표·쿠폰·정기권 JSON 저장소 |
+| `infrastructure/csv_sessions.py` | 입출차 기록 CSV 읽기 |
+| `presentation/cli.py` | 명령 정의와 조립 |
+| `presentation/formatters.py` | 출력 형식 Strategy: 텍스트 영수증, JSON |
+
+## 4. 출차 정산 흐름
+
+```
+CLI(calc) ─▶ ParkingSession 생성
+          ─▶ CheckoutService.checkout(session)
+               1. PricingConfig.lot(lot_id)                 주차장 정책 조회
+               2. SeasonPassRepository.find_by_plate()       정기권이면 0원 영수증
+               3. parked_minutes <= grace_minutes            회차면 0원 영수증
+               4. create_charge_strategy(schedule).charge()  할인 전 요금
+               5. DiscountPipeline.run()                     감면 → 멤버십
+               6. FloorRounding.apply()                      100원 미만 절사
+               7. split_vat()                                공급가액·부가세
+          ─▶ OutputFormatter.receipt(receipt)
+```
+
+## 5. 디자인 패턴 사용처
+
+| 패턴 | 위치 | 이유 |
+|---|---|---|
+| Strategy | `ChargeStrategy`, `DiscountPolicy`, `OutputFormatter` | 주차장별 요금 방식, 할인 종류, 출력 형식이 독립적으로 바뀐다 |
+| Factory | `create_charge_strategy`, `create_formatter` | 설정값으로 구현을 고르는 코드를 한곳에 모은다 |
+| Pipeline | `DiscountPipeline` | 규정이 정한 할인 순서를 등록 순서로 표현한다 |
+| Repository | `application/ports.py` + `infrastructure/json_store.py` | 파일 형식과 유스케이스를 분리하고 테스트에서 가짜 저장소를 쓴다 |
+| Value Object | `Money` | 금액 규칙(음수 금지, 버림)을 한곳에서 지킨다 |
+
+## 6. 확장 가이드
+
+- **새 요금 방식**: `ChargeStrategy` 구현 추가 → `schedule.py`에 요금표 타입 추가 → `create_charge_strategy`와 설정 로더에 등록 → ADR 작성.
+- **새 비율 할인**: `DiscountPolicy` 구현 추가 → `CheckoutService` 기본 파이프라인에 규정 순서대로 등록.
+- **누적이 아닌 할인 규칙**: 파이프라인은 "앞 할인이 적용된 금액에 다음 할인을 적용"하는 규칙만 표현한다. 규정이 다른 방식의 조합을 요구하면 유스케이스(`CheckoutService`)에서 처리하고, 이유를 ADR로 남긴다.
+- **새 출력 항목**: `Receipt`에 필드 추가 → `TextFormatter`, `JsonFormatter` 모두 수정 → `docs/api/cli.md` 갱신.

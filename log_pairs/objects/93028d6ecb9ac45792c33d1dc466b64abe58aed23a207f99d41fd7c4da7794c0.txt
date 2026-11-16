@@ -1,0 +1,26 @@
+import json, math
+from datetime import datetime
+fees=json.load(open('data/fee_schedules.json'))
+lots={x['lot_id']:x for x in fees['lots']}
+coupons={x['code']:x for x in json.load(open('data/coupons.json'))}
+cases=json.load(open('work/fee-inputs.json'))
+def charge(minutes, rule):
+    if minutes<=0:return 0
+    return min(rule['daily_max'], rule['base_fee']+max(0,math.ceil((minutes-rule['base_minutes'])/rule['unit_minutes']))*rule['unit_fee'])
+results=[]
+for c in cases:
+    lot=lots[c['lot']]; rule=lot['charge']; coupon=coupons[c['coupon']]
+    raw=charge(c['minutes'],rule)
+    regular=raw
+    if c['vehicle']=='compact':regular=regular*70//100
+    if c['member']:regular=regular*(100-lot['membership_rate'])//100
+    regular=regular//100*100
+    status='unused'; total=regular
+    if c['minutes']<=lot['grace_minutes']:total=0
+    elif coupon['valid_until']<'2026-09-01T09:00:00':status='expired'
+    else:
+        amount=charge(max(0,c['minutes']-coupon['value']),rule) if coupon['kind']=='time' else max(0,raw-coupon['value'])
+        amount=amount//100*100
+        if amount<regular:total=amount;status='applied'
+    results.append({'id':c['id'],'total':total,'coupon_status':status})
+print(json.dumps(results,ensure_ascii=False))

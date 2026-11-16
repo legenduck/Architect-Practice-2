@@ -1,0 +1,26 @@
+"""금액 절사와 부가세 분리(요금 규정 제10~11조)."""
+
+from __future__ import annotations
+
+from parkfee.domain.money import Money
+
+VAT_RATE_PERCENT = 10
+
+
+class FloorRounding:
+    """결제 금액의 unit 원 미만을 절사한다."""
+
+    def __init__(self, unit: int) -> None:
+        if unit <= 0:
+            raise ValueError(f"절사 단위는 양수여야 합니다: {unit}")
+        self._unit = unit
+
+    def apply(self, amount: Money) -> Money:
+        return amount.floor_to(self._unit)
+
+
+def split_vat(total: Money) -> tuple[Money, Money]:
+    """부가세 포함 금액을 공급가액과 부가세로 나눈다. 공급가액은 원 미만 반올림."""
+    divisor = 100 + VAT_RATE_PERCENT
+    supply = Money((total.won * 100 + divisor // 2) // divisor)
+    return supply, Money(total.won - supply.won)

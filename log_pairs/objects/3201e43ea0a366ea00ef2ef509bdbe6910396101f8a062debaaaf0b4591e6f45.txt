@@ -1,0 +1,129 @@
+# CLI 명세
+
+| 항목 | 내용 |
+|---|---|
+| 문서 번호 | API-CLI-001 |
+| 버전 | 1.6 (parkfee 1.6.0) |
+| 작성 | 송다은 (정산플랫폼팀) |
+
+정산기와 앱 백엔드는 `--format json` 출력을 파싱합니다. JSON 필드를 바꾸거나 지우면 연동 시스템이 깨지므로, 필드는 추가만 하고 변경·삭제는 연동팀과 협의합니다.
+
+## 1. 전역 옵션
+
+| 옵션 | 기본값 | 설명 |
+|---|---|---|
+| `--data-dir DIR` | `data` (환경 변수 `PARKFEE_DATA_DIR`가 있으면 그 값) | 요금표·쿠폰·정기권 파일 위치 |
+| `--log-level LEVEL` | `WARNING` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
+| `--version` | - | 버전 출력 |
+
+전역 옵션은 명령 이름 앞에 씁니다. 예: `parkfee --data-dir /opt/parkfee/data calc ...`
+
+## 2. calc — 출차 1건 정산
+
+```
+parkfee calc --lot LOT --plate PLATE --entry DATETIME --exit DATETIME
+             [--vehicle-type {general,compact,low-emission}]
+             [--reduction {none,disabled,veteran}]
+             [--member] [--format {text,json}]
+```
+
+| 옵션 | 필수 | 설명 |
+|---|---|---|
+| `--lot` | 예 | 주차장 ID (HJ-01, HJ-02, HJ-03) |
+| `--plate` | 예 | 차량번호 |
+| `--entry` | 예 | 입차 시각, 예: `2026-09-01T09:00` 또는 `2026-09-01 09:00:30` |
+| `--exit` | 예 | 출차 시각 |
+| `--vehicle-type` | 아니오 | 차종. 기본 `general` |
+| `--reduction` | 아니오 | 감면 구분. 기본 `none`. 증빙 확인 후에만 지정 |
+| `--member` | 아니오 | 한결 멤버십 회원 |
+| `--format` | 아니오 | `text`(기본) 또는 `json` |
+
+### 2.1 텍스트 출력 예
+
+```
+[한결파킹 주차 영수증]
+주차장   : 한결타워 (HJ-01)
+차량번호 : 12가3456
+입차     : 2026-09-01 09:00
+출차     : 2026-09-01 11:05
+주차시간 : 2시간 5분
+주차요금 : 7,000원
+할인     : 경형 자동차 감면 30% -2,100원
+할인     : 한결 멤버십 10% -490원
+결제금액 : 4,400원 (공급가액 4,000원 / 부가세 400원)
+```
+
+### 2.2 JSON 출력
+
+```json
+{
+  "lot_id": "HJ-01",
+  "lot_name": "한결타워",
+  "plate": "12가3456",
+  "entry_at": "2026-09-01T09:00:00",
+  "exit_at": "2026-09-01T11:05:00",
+  "parked_minutes": 125,
+  "charge": 7000,
+  "discounts": [
+    {"type": "reduction", "name": "경형 자동차 감면 30%", "amount": 2100},
+    {"type": "membership", "name": "한결 멤버십 10%", "amount": 490}
+  ],
+  "total": 4400,
+  "vat": {"supply": 4000, "tax": 400},
+  "grace": false,
+  "season_pass": false
+}
+```
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `charge` | int | 할인 전 요금 (회차·정기권이면 0) |
+| `discounts[].type` | string | `reduction`, `membership` |
+| `discounts[].amount` | int | 할인 금액 (절사 전) |
+| `total` | int | 최종 결제 금액 (절사 후) |
+| `vat.supply`, `vat.tax` | int | 공급가액, 부가세 |
+| `grace` | bool | 회차 무료 여부 |
+| `season_pass` | bool | 정기권 무료 여부 |
+
+## 3. batch — 일일 정산 리포트
+
+```
+parkfee batch SESSIONS_CSV [--format {text,json}]
+```
+
+입력 CSV 형식은 [데이터 모델](../architecture/data-model.md) 3절을 따릅니다.
+
+```json
+{
+  "lots": [
+    {"lot_id": "HJ-01", "lot_name": "한결타워", "sessions": 6, "free_sessions": 2,
+     "charge": 38500, "discount": 6015, "revenue": 32400}
+  ],
+  "total_sessions": 16,
+  "total_revenue": 79900
+}
+```
+
+`revenue`는 절사 후 결제 금액의 합이므로 `charge - discount`와 절사 차액만큼 다를 수 있습니다.
+
+## 4. coupon show — 쿠폰 조회
+
+```
+parkfee coupon show CODE [--format {text,json}]
+```
+
+```json
+{
+  "code": "HJM-2609-0001",
+  "kind": "time",
+  "value": 60,
+  "lot_id": "HJ-02",
+  "partner": "한결시네마",
+  "valid_from": "2026-09-01T00:00:00",
+  "valid_until": "2026-09-30T23:59:59",
+  "description": "한결시네마 무료 주차 60분"
+}
+```
+
+## 5. 종료 코드
+0 정상, 2 사용법 오류, 3 입력 오류(E1xxx, E2xxx), 4 데이터 파일 오류(E3xxx). 오류 메시지는 표준 오류로 `[코드] 메시지` 형식으로 출력합니다.

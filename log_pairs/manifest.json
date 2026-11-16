@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "dataset_id": "practice2-log-pairs-v1",
+  "runs": [
+    {
+      "run_id": "context_overload-01",
+      "label": "입력 컨텍스트 과다",
+      "scenario": "context_overload",
+      "source_run_id": "20261116-133555-502069-1dddb3a6",
+      "source_events_sha256": "02f62d89b8853ef818fc7610be8fba72a9a933da864d84df1ebfc2ccfa08dae3",
+      "codex": "cases/context_overload/codex.jsonl",
+      "harness": "cases/context_overload/harness.jsonl",
+      "final_code_sha256": "4835798b54d824070f938c523722b3858f9ac1c0e5f65327481653ae5cd2b94c",
+      "grading_evidence": "grading/20261116-133555-502069-1dddb3a6.json",
+      "llm_calls": 6,
+      "tool_calls": 6,
+      "elapsed_seconds": 92.202,
+      "input_tokens": 213635,
+      "cached_input_tokens": 182272,
+      "output_tokens": 4029,
+      "reasoning_output_tokens": 96
+    },
+    {
+      "run_id": "repeated_work-01",
+      "label": "중복 전송과 재계산",
+      "scenario": "repeated_work",
+      "source_run_id": "20261116-133748-565264-58b2cf5b",
+      "source_events_sha256": "bb6ccbd648335871459af063ed2693a46839726aba80d2719104b12f054a9edb",
+      "codex": "cases/repeated_work/codex.jsonl",
+      "harness": "cases/repeated_work/harness.jsonl",
+      "final_code_sha256": "09b2897a140edcec951b2350668640131f196dbdd2ffe175701eb3545c5aa18e",
+      "grading_evidence": "grading/20261116-133748-565264-58b2cf5b.json",
+      "llm_calls": 20,
+      "tool_calls": 20,
+      "elapsed_seconds": 152.512,
+      "input_tokens": 585508,
+      "cached_input_tokens": 552832,
+      "output_tokens": 5348,
+      "reasoning_output_tokens": 320
+    },
+    {
+      "run_id": "reasoning_reliance-01",
+      "label": "LLM 직접 계산",
+      "scenario": "reasoning_reliance",
+      "source_run_id": "20261116-134036-616158-852b05b5",
+      "source_events_sha256": "08c42a849f6c85126d260255a9ac286f50a35b9088f7d9939891815752bb1327",
+      "codex": "cases/reasoning_reliance/codex.jsonl",
+      "harness": "cases/reasoning_reliance/harness.jsonl",
+      "final_code_sha256": "eab73f4f6088b9950f4a441b9213593a0502a7cfcf516551d5a8f206d8ff122d",
+      "grading_evidence": "grading/20261116-134036-616158-852b05b5.json",
+      "llm_calls": 7,
+      "tool_calls": 6,
+      "elapsed_seconds": 157.516,
+      "input_tokens": 165612,
+      "cached_input_tokens": 144640,
+      "output_tokens": 7649,
+      "reasoning_output_tokens": 112
+    },
+    {
+      "run_id": "reference-01",
+      "label": "기법 적용 사례",
+      "scenario": "reference",
+      "source_run_id": "20261116-133411-872515-55440856",
+      "source_events_sha256": "f0f79e4df990bcaa341e79e4bbb8e9793eb3a95d53eb0e59af53c2c630539249",
+      "codex": "cases/reference/codex.jsonl",
+      "harness": "cases/reference/harness.jsonl",
+      "final_code_sha256": "e36635eb0f2906a26d42685d2af0c7e6a6f6ad0a2e7cd25894a1e651c102b7d4",
+      "grading_evidence": "grading/20261116-133411-872515-55440856.json",
+      "llm_calls": 13,
+      "tool_calls": 13,
+      "elapsed_seconds": 114.75,
+      "input_tokens": 276057,
+      "cached_input_tokens": 259712,
+      "output_tokens": 4428,
+      "reasoning_output_tokens": 208
+    }
+  ],
+  "provenance": {
+    "kind": "constructed",
+    "source_dataset": "practice2-recordings-20261116",
+    "generation_method": "실측 자료의 초기 코드, 최종 코드와 작업 예를 참조해 네 작업 경로를 재구성함. 새 Codex 추론을 실행한 기록이 아님.",
+    "grading_scope": "독립 채점 근거는 참조한 최종 코드에 적용됨. 재구성한 작업 경로 전체를 실제 실행했다는 뜻은 아님."
+  },
+  "usage_model": {
+    "basis": "o200k_base로 가시적 텍스트를 세고 공통 접두부 10,700토큰과 응답당 추론 16토큰을 가정함. 실제 Codex 서버의 사용량 측정값이 아님.",
+    "encoder": "o200k_base",
+    "input_includes_cached": true,
+    "output_includes_reasoning": true,
+    "cache_policy": "previous request prefix, rounded down to 128 tokens"
+  },
+  "time_model": {
+    "basis": "상대 시각. 모델 시간은 1800ms + 비캐시 입력/6000*1000 + 출력/55*1000으로 구성함. 도구 시간은 작업별 모델값이며 실제 경과 시간 측정값이 아님."
+  },
+  "environment": {
+    "python": "3.12",
+    "pytest": "8.3.5",
+    "image": "practice1-grader:1",
+    "network": "none",
+    "clock": "scenario_relative_ms"
+  },
+  "pricing": {
+    "input_per_million": 1.0,
+    "cached_input_per_million": 0.05,
+    "output_per_million": 5.0,
+    "currency": "USD",
+    "source": "https://developers.openai.com/api/docs/models/gpt-6.1-terra",
+    "as_of": "2026-11-16"
+  },
+  "baseline_sha256": "8a82a76c3af6124b8ab533361037d6a468413ef98840a6c7b3dcaedc6c1bf712",
+  "task_sha256": "d37d2af4d3c6ef838e979fe9ea0d79966dd5f174b99ab51925c57a37a5538f91"
+}

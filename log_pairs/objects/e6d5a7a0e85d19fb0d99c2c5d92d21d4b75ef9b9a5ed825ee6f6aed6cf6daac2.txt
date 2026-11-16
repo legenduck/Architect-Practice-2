@@ -1,0 +1,25 @@
+"""시각 문자열 해석. 타임존 없는 ISO 8601(KST)만 받는다."""
+
+from __future__ import annotations
+
+from datetime import date, datetime
+
+from parkfee.domain.errors import InvalidTimeFormatError
+
+
+def parse_datetime(text: str) -> datetime:
+    """'2026-09-01T09:00' 또는 '2026-09-01 09:00:30' 형식을 해석한다."""
+    try:
+        value = datetime.fromisoformat(text.strip())
+    except ValueError:
+        raise InvalidTimeFormatError(f"시각 형식이 올바르지 않습니다: {text!r}") from None
+    if value.tzinfo is not None:
+        raise InvalidTimeFormatError(f"타임존 정보는 쓰지 않습니다(KST 기준): {text!r}")
+    return value
+
+
+def parse_date(text: str) -> date:
+    try:
+        return date.fromisoformat(text.strip())
+    except ValueError:
+        raise InvalidTimeFormatError(f"날짜 형식이 올바르지 않습니다: {text!r}") from None

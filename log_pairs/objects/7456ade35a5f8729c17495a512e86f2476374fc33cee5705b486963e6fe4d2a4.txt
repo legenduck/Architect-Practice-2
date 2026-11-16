@@ -1,0 +1,34 @@
+"""절사와 부가세(요금 규정 제10~11조)."""
+
+import pytest
+
+from parkfee.domain.errors import UnknownLotError
+from parkfee.domain.money import Money
+from parkfee.pricing.rounding import FloorRounding, split_vat
+from parkfee.pricing.schedule import PricingConfig
+
+
+def test_floor_rounding_discards_below_unit() -> None:
+    """제10조: 결제 금액의 100원 미만은 절사한다."""
+    assert FloorRounding(100).apply(Money(4410)) == Money(4400)
+    assert FloorRounding(100).apply(Money(99)) == Money(0)
+
+
+def test_rounding_unit_must_be_positive() -> None:
+    with pytest.raises(ValueError):
+        FloorRounding(0)
+
+
+@pytest.mark.parametrize(
+    ("total", "supply", "tax"),
+    [(4400, 4000, 400), (7000, 6364, 636), (0, 0, 0), (1200, 1091, 109)],
+)
+def test_split_vat(total: int, supply: int, tax: int) -> None:
+    """제11조: 공급가액은 결제 금액 / 1.1을 원 미만 반올림하고 나머지를 부가세로 한다."""
+    assert split_vat(Money(total)) == (Money(supply), Money(tax))
+
+
+def test_unknown_lot_raises(pricing_config: PricingConfig) -> None:
+    with pytest.raises(UnknownLotError) as error:
+        pricing_config.lot("HJ-99")
+    assert error.value.code == "E1003"

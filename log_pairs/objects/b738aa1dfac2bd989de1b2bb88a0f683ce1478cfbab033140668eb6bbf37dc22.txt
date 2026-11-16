@@ -1,0 +1,60 @@
+"""정산 결과(영수증)."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from enum import Enum
+
+from parkfee.domain.money import Money
+from parkfee.domain.session import ParkingSession
+
+
+class CouponStatus(str, Enum):
+    APPLIED = "applied"
+    UNUSED = "unused"
+    EXPIRED = "expired"
+
+
+@dataclass(frozen=True)
+class CouponResult:
+    code: str
+    status: CouponStatus
+
+
+class DiscountKind(str, Enum):
+    REDUCTION = "reduction"
+    MEMBERSHIP = "membership"
+    COUPON = "coupon"
+
+
+@dataclass(frozen=True)
+class AppliedDiscount:
+    """정산에 실제로 적용된 할인 1건."""
+
+    kind: DiscountKind
+    name: str
+    amount: Money
+
+
+@dataclass(frozen=True)
+class Receipt:
+    """출차 정산 결과. charge는 할인 전 요금, total은 절사 후 결제 금액이다."""
+
+    session: ParkingSession
+    lot_name: str
+    parked_minutes: int
+    charge: Money
+    discounts: tuple[AppliedDiscount, ...]
+    total: Money
+    vat_supply: Money
+    vat_tax: Money
+    grace_applied: bool = False
+    season_pass_applied: bool = False
+    coupon: CouponResult | None = None
+
+    @property
+    def discount_total(self) -> Money:
+        total = Money.zero()
+        for discount in self.discounts:
+            total = total + discount.amount
+        return total

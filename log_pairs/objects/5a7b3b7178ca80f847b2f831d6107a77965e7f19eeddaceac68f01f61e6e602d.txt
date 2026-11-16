@@ -1,0 +1,151 @@
+"""출차 정산 유스케이스(UC-01~04)."""
+
+from __future__ import annotations
+
+import logging
+
+from parkfee.application.ports import SeasonPassRepository
+from parkfee.domain.coupon import Coupon, CouponKind
+from parkfee.domain.money import Money
+from parkfee.domain.plate import mask_plate
+from parkfee.domain.receipt import (
+    AppliedDiscount,
+    CouponResult,
+    CouponStatus,
+    DiscountKind,
+    Receipt,
+)
+from parkfee.domain.session import ParkingSession
+from parkfee.pricing.charge import create_charge_strategy
+from parkfee.pricing.discount import DiscountContext, MembershipPolicy, ReductionPolicy
+from parkfee.pricing.pipeline import DiscountPipeline
+from parkfee.pricing.rounding import FloorRounding, split_vat
+from parkfee.pricing.schedule import LotPolicy, PricingConfig
+
+logger = logging.getLogger(__name__)
+
+
+class CheckoutService:
+    """출차 1건을 정산한다.
+
+    순서: 정기권 확인 → 회차 확인 → 요금 계산 → 할인 → 절사 → 부가세 분리
+    (요금 규정 제9조).
+    """
+
+    def __init__(
+        self,
+        config: PricingConfig,
+        season_passes: SeasonPassRepository,
+        pipeline: DiscountPipeline | None = None,
+    ) -> None:
+        self._config = config
+        self._season_passes = season_passes
+        self._pipeline = pipeline or DiscountPipeline(
+            [ReductionPolicy(config.reduction_rates), MembershipPolicy()]
+        )
+        self._rounding = FloorRounding(config.rounding_unit)
+
+    def checkout(self, session: ParkingSession, coupon: Coupon | None = None) -> Receipt:
+        lot = self._config.lot(session.lot_id)
+        minutes = session.parked_minutes
+        logger.debug(
+            "정산 시작 lot=%s plate=%s minutes=%d",
+            lot.lot_id,
+            mask_plate(session.plate),
+            minutes,
+        )
+        coupon_result = None
+        if coupon is not None:
+            status = (
+                CouponStatus.EXPIRED
+                if session.exit_at > coupon.valid_until
+                else CouponStatus.UNUSED
+            )
+            coupon_result = CouponResult(coupon.code, status)
+        if self._has_valid_season_pass(session):
+            logger.debug("정기권 차량: 요금 0원")
+            return self._free_receipt(session, lot, minutes, season_pass=True, coupon=coupon_result)
+        if minutes <= lot.grace_minutes:
+            logger.debug("회차 시간 %d분 이내: 요금 0원", lot.grace_minutes)
+            return self._free_receipt(session, lot, minutes, grace=True, coupon=coupon_result)
+        return self._charged_receipt(session, lot, minutes, coupon, coupon_result)
+
+    def _has_valid_season_pass(self, session: ParkingSession) -> bool:
+        return any(
+            season_pass.covers(session)
+            for season_pass in self._season_passes.find_by_plate(session.plate)
+        )
+
+    def _charged_receipt(
+        self,
+        session: ParkingSession,
+        lot: LotPolicy,
+        minutes: int,
+        coupon: Coupon | None,
+        coupon_result: CouponResult | None,
+    ) -> Receipt:
+        charge = create_charge_strategy(lot.schedule).charge(minutes)
+        result = self._pipeline.run(charge, DiscountContext(session=session, lot=lot))
+        total = self._rounding.apply(result.amount)
+        discounts = result.applied
+        if (
+            coupon is not None
+            and coupon.lot_id == lot.lot_id
+            and coupon.is_valid_at(session.exit_at)
+        ):
+            if coupon.kind is CouponKind.TIME:
+                coupon_amount = create_charge_strategy(lot.schedule).charge(
+                    max(0, minutes - coupon.value)
+                )
+            else:
+                coupon_amount = charge.minus(Money(coupon.value))
+            coupon_total = self._rounding.apply(coupon_amount)
+            logger.debug(
+                "쿠폰 적용 후 %s, 절사 후 %s, 일반 할인 후 %s", coupon_amount, coupon_total, total
+            )
+            if coupon_total < total:
+                total = coupon_total
+                discounts = (
+                    AppliedDiscount(
+                        DiscountKind.COUPON, coupon.describe(), charge.minus(coupon_amount)
+                    ),
+                )
+                coupon_result = CouponResult(coupon.code, CouponStatus.APPLIED)
+        supply, tax = split_vat(total)
+        logger.debug("요금 %s, 할인 후 %s, 결제 %s", charge, result.amount, total)
+        return Receipt(
+            session=session,
+            lot_name=lot.name,
+            parked_minutes=minutes,
+            charge=charge,
+            discounts=discounts,
+            total=total,
+            vat_supply=supply,
+            vat_tax=tax,
+            coupon=coupon_result,
+        )
+
+    @staticmethod
+    def _free_receipt(
+        session: ParkingSession,
+        lot: LotPolicy,
+        minutes: int,
+        *,
+        grace: bool = False,
+        season_pass: bool = False,
+        coupon: CouponResult | None = None,
+    ) -> Receipt:
+        zero = Money.zero()
+        return Receipt(
+            session=session,
+            lot_name=lot.name,
+            parked_minutes=minutes,
+            charge=zero,
+            discounts=(),
+            total=zero,
+            vat_supply=zero,
+            vat_tax=zero,
+            grace_applied=grace,
+            season_pass_applied=season_pass,
+            coupon=coupon,
+        )

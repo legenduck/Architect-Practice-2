@@ -1,0 +1,120 @@
+"""JSON 데이터 파일 저장소(ADR-004, data-model.md)."""
+
+from __future__ import annotations
+
+import json
+from datetime import date
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from parkfee.domain.coupon import CouponKind
+from parkfee.domain.errors import CouponNotFoundError, DataFileError
+from parkfee.domain.money import Money
+from parkfee.infrastructure.data_dir import DataDirectory
+from parkfee.infrastructure.json_store import (
+    JsonCouponRepository,
+    JsonPricingConfigLoader,
+    JsonSeasonPassRepository,
+)
+from parkfee.pricing.schedule import DailyFlatSchedule, StandardSchedule
+
+
+def _write(path: Path, payload: Any) -> Path:
+    path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def test_loads_repository_fee_schedules(data_dir: DataDirectory) -> None:
+    config = JsonPricingConfigLoader().load(data_dir.fee_schedules)
+    assert config.rounding_unit == 100
+    assert config.reduction_rates["compact"] == 30
+    tower = config.lot("HJ-01")
+    assert isinstance(tower.schedule, StandardSchedule)
+    assert tower.schedule.daily_max == Money(25000)
+    assert config.lot("HJ-02").grace_minutes == 15
+    assert isinstance(config.lot("HJ-03").schedule, DailyFlatSchedule)
+    assert config.lot("HJ-03").membership_rate == 0
+
+
+def test_missing_file_is_data_error(tmp_path: Path) -> None:
+    with pytest.raises(DataFileError) as error:
+        JsonPricingConfigLoader().load(tmp_path / "none.json")
+    assert error.value.exit_code == 4
+
+
+def test_broken_json_is_data_error(tmp_path: Path) -> None:
+    path = tmp_path / "fee_schedules.json"
+    path.write_text("{ broken", encoding="utf-8")
+    with pytest.raises(DataFileError):
+        JsonPricingConfigLoader().load(path)
+
+
+def test_missing_key_is_data_error(tmp_path: Path) -> None:
+    payload = {"version": "x", "rounding_unit": 100, "lots": []}
+    path = _write(tmp_path / "fee_schedules.json", payload)
+    with pytest.raises(DataFileError, match="reduction_rates"):
+        JsonPricingConfigLoader().load(path)
+
+
+def test_unknown_charge_type_is_data_error(tmp_path: Path) -> None:
+    payload = {
+        "version": "x",
+        "rounding_unit": 100,
+        "reduction_rates": {},
+        "lots": [
+            {
+                "lot_id": "HJ-09",
+                "name": "테스트",
+                "charge": {"type": "hourly"},
+                "grace_minutes": 10,
+                "membership_rate": 0,
+            }
+        ],
+    }
+    with pytest.raises(DataFileError, match="hourly"):
+        JsonPricingConfigLoader().load(_write(tmp_path / "fee.json", payload))
+
+
+def test_find_coupon(data_dir: DataDirectory) -> None:
+    coupon = JsonCouponRepository(data_dir.coupons).find("HJM-2609-0001")
+    assert coupon.kind is CouponKind.TIME
+    assert coupon.value == 60
+    assert coupon.lot_id == "HJ-02"
+
+
+def test_unknown_coupon(data_dir: DataDirectory) -> None:
+    with pytest.raises(CouponNotFoundError) as error:
+        JsonCouponRepository(data_dir.coupons).find("HJM-0000-0000")
+    assert error.value.code == "E2001"
+
+
+def test_coupon_with_bad_kind_is_data_error(tmp_path: Path) -> None:
+    record = {
+        "code": "X",
+        "kind": "percent",
+        "value": 10,
+        "lot_id": "HJ-01",
+        "partner": "테스트",
+        "valid_from": "2026-09-01T00:00",
+        "valid_until": "2026-09-30T23:59",
+    }
+    with pytest.raises(DataFileError):
+        JsonCouponRepository(_write(tmp_path / "coupons.json", [record])).find("X")
+
+
+def test_season_passes_by_plate(data_dir: DataDirectory) -> None:
+    passes = JsonSeasonPassRepository(data_dir.season_passes).find_by_plate("34나5678")
+    assert len(passes) == 1
+    assert passes[0].end_date == date(2026, 9, 30)
+
+
+def test_missing_season_pass_file_means_no_pass(tmp_path: Path) -> None:
+    assert JsonSeasonPassRepository(tmp_path / "none.json").find_by_plate("34나5678") == []
+
+
+def test_season_pass_with_bad_date_is_data_error(tmp_path: Path) -> None:
+    record = {"plate": "1", "lot_id": "HJ-01", "start_date": "2026-09-01", "end_date": "9월"}
+    with pytest.raises(DataFileError):
+        JsonSeasonPassRepository(_write(tmp_path / "p.json", [record])).find_by_plate("1")

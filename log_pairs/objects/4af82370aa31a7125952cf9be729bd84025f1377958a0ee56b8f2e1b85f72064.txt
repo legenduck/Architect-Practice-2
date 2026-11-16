@@ -1,0 +1,45 @@
+"""금액 값 객체(ADR-002)."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True, order=True)
+class Money:
+    """원 단위 정수 금액. 음수를 허용하지 않는다."""
+
+    won: int
+
+    def __post_init__(self) -> None:
+        if self.won < 0:
+            raise ValueError(f"금액은 음수일 수 없습니다: {self.won}")
+
+    @classmethod
+    def zero(cls) -> Money:
+        return cls(0)
+
+    @property
+    def is_zero(self) -> bool:
+        return self.won == 0
+
+    def __add__(self, other: Money) -> Money:
+        return Money(self.won + other.won)
+
+    def minus(self, other: Money) -> Money:
+        """금액을 차감한다. 결과가 0원 미만이면 0원으로 고정한다."""
+        return Money(max(0, self.won - other.won))
+
+    def times(self, count: int) -> Money:
+        return Money(self.won * count)
+
+    def percent(self, rate: int) -> Money:
+        """금액의 rate%를 계산한다. 원 미만은 버린다."""
+        return Money(self.won * rate // 100)
+
+    def floor_to(self, unit: int) -> Money:
+        """unit 원 미만을 절사한다."""
+        return Money(self.won // unit * unit)
+
+    def __str__(self) -> str:
+        return f"{self.won:,}원"

@@ -1,0 +1,21 @@
+# 신규 입사자 온보딩 체크리스트 (정산플랫폼팀)
+
+## 1일차
+- [ ] 사내 계정, 저장소 권한, 메신저 채널(`#parkfee`, `#parkfee-oncall`) 신청
+- [ ] [개발 환경 설정](../development/setup.md)대로 설치하고 `make check` 통과 확인
+- [ ] [서비스 개요](../product/overview.md), [용어집](../product/glossary.md) 읽기
+
+## 1주차
+- [ ] [요금 규정](../policy/fee-policy.md), [할인·감면 규정](../policy/discount-policy.md) 읽고 계산 예를 `parkfee calc`로 직접 재현
+- [ ] [아키텍처 개요](../architecture/overview.md)와 ADR 4건 읽기
+- [ ] [코딩 컨벤션](../development/coding-convention.md), [테스트 전략](../development/testing-strategy.md), [코드 리뷰 가이드](../development/code-review.md) 읽기
+- [ ] 한결타워 현장 견학 (운영팀 박지훈, 정산기·LPR 동작 확인)
+
+## 2주차
+- [ ] [장애 보고서 2026-05](postmortem-2026-05-settlement-mismatch.md) 읽기
+- [ ] 첫 PR: `good-first-issue` 라벨 이슈 하나 처리
+- [ ] 당번 교육 ([장애 대응 런북](../operations/incident-runbook.md), [모니터링](../operations/monitoring.md))
+
+## 알아 두면 좋은 것
+- 규정 문서가 회의록·FAQ·변경 이력보다 우선합니다. 회의록의 "잠정" 결정은 규정 개정 전까지 효력이 없습니다.
+- 법규 관련 질문은 법무팀 최유진 님께 문의합니다.

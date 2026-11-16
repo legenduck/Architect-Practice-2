@@ -1,0 +1,73 @@
+"""할인 정책(Strategy, ADR-003). 할인·감면 규정 제2~3장."""
+
+from __future__ import annotations
+
+import logging
+from abc import ABC, abstractmethod
+from collections.abc import Mapping
+from dataclasses import dataclass
+
+from parkfee.domain.money import Money
+from parkfee.domain.receipt import AppliedDiscount, DiscountKind
+from parkfee.domain.session import ParkingSession
+from parkfee.domain.vehicle import REDUCTION_LABELS, ReductionType, VehicleType
+from parkfee.pricing.schedule import LotPolicy
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class DiscountContext:
+    """할인 판단에 필요한 정보."""
+
+    session: ParkingSession
+    lot: LotPolicy
+
+
+class DiscountPolicy(ABC):
+    """현재 금액에 대한 할인 1건을 계산한다. 해당 없으면 None."""
+
+    @abstractmethod
+    def apply(self, amount: Money, context: DiscountContext) -> AppliedDiscount | None:
+        raise NotImplementedError
+
+
+class ReductionPolicy(DiscountPolicy):
+    """감면. 여러 감면에 해당하면 감면율이 가장 큰 하나만 적용한다."""
+
+    def __init__(self, rates: Mapping[str, int]) -> None:
+        self._rates = dict(rates)
+
+    def apply(self, amount: Money, context: DiscountContext) -> AppliedDiscount | None:
+        candidates = self._eligible(context.session)
+        if not candidates:
+            return None
+        key, rate = max(candidates, key=lambda candidate: candidate[1])
+        logger.debug("감면 후보 %s 중 %s(%d%%) 적용", candidates, key, rate)
+        return AppliedDiscount(
+            kind=DiscountKind.REDUCTION,
+            name=f"{REDUCTION_LABELS[key]} 감면 {rate}%",
+            amount=amount.percent(rate),
+        )
+
+    def _eligible(self, session: ParkingSession) -> list[tuple[str, int]]:
+        keys: list[str] = []
+        if session.reduction is not ReductionType.NONE:
+            keys.append(session.reduction.value)
+        if session.vehicle_type is not VehicleType.GENERAL:
+            keys.append(session.vehicle_type.value)
+        return [(key, self._rates[key]) for key in keys if self._rates.get(key, 0) > 0]
+
+
+class MembershipPolicy(DiscountPolicy):
+    """한결 멤버십 할인. 주차장별 할인율이 0이면 적용하지 않는다."""
+
+    def apply(self, amount: Money, context: DiscountContext) -> AppliedDiscount | None:
+        rate = context.lot.membership_rate
+        if not context.session.is_member or rate == 0:
+            return None
+        return AppliedDiscount(
+            kind=DiscountKind.MEMBERSHIP,
+            name=f"한결 멤버십 {rate}%",
+            amount=amount.percent(rate),
+        )

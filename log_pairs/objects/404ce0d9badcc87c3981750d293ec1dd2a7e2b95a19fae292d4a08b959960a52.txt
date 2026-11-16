@@ -1,0 +1,94 @@
+# 데이터 모델
+
+| 항목 | 내용 |
+|---|---|
+| 문서 번호 | ARC-DATA-002 |
+| 버전 | 1.3 (2026-08-25) |
+| 작성 | 송다은 (정산플랫폼팀) |
+
+## 1. 엔터티
+
+| 엔터티 | 주요 속성 | 비고 |
+|---|---|---|
+| ParkingSession | lot_id, plate, entry_at, exit_at, vehicle_type, reduction, is_member | 시각은 타임존 없는 KST |
+| Coupon | code, kind(time/amount), value, lot_id, partner, valid_from, valid_until | value 단위: time=분, amount=원 |
+| SeasonPass | plate, lot_id, start_date, end_date | 기간은 시작일·종료일 포함 |
+| Receipt | session, lot_name, parked_minutes, charge, discounts, total, vat_supply, vat_tax, grace_applied, season_pass_applied | charge는 할인 전, total은 절사 후 |
+
+## 2. 데이터 디렉터리
+
+`--data-dir`(기본 `data/`, 환경 변수 `PARKFEE_DATA_DIR`) 아래에 다음 파일을 둡니다. 운영본은 매일 05:00 배포 파이프라인이 갱신합니다.
+
+| 파일 | 내용 | 갱신 주체 |
+|---|---|---|
+| `fee_schedules.json` | 요금표, 감면율, 절사 단위 | 정산플랫폼팀 (기획팀 승인 후) |
+| `coupons.json` | 제휴 쿠폰 목록 | 제휴운영 시스템 (매일 05:00) |
+| `season_passes.json` | 정기권 목록 | 운영팀 정기권 관리 화면 |
+
+### 2.1 fee_schedules.json
+
+```json
+{
+  "version": "2026-08-01",
+  "rounding_unit": 100,
+  "reduction_rates": {"disabled": 50, "veteran": 50, "compact": 30, "low-emission": 30},
+  "lots": [
+    {
+      "lot_id": "HJ-01",
+      "name": "한결타워",
+      "charge": {"type": "standard", "base_minutes": 30, "base_fee": 2000,
+                 "unit_minutes": 10, "unit_fee": 500, "daily_max": 25000},
+      "grace_minutes": 10,
+      "membership_rate": 10
+    },
+    {
+      "lot_id": "HJ-03",
+      "name": "한결역 환승주차장",
+      "charge": {"type": "daily-flat", "daily_fee": 6000},
+      "grace_minutes": 10,
+      "membership_rate": 0
+    }
+  ]
+}
+```
+
+- `charge.type`: `standard`(시간제) 또는 `daily-flat`(정액제)
+- 금액은 모두 원 단위 정수, 비율은 퍼센트 정수
+
+### 2.2 coupons.json
+
+```json
+[
+  {
+    "code": "HJM-2609-0001",
+    "kind": "time",
+    "value": 60,
+    "lot_id": "HJ-02",
+    "partner": "한결시네마",
+    "valid_from": "2026-09-01T00:00:00",
+    "valid_until": "2026-09-30T23:59:59"
+  }
+]
+```
+
+### 2.3 season_passes.json
+
+```json
+[{"plate": "34나5678", "lot_id": "HJ-01", "start_date": "2026-09-01", "end_date": "2026-09-30"}]
+```
+
+파일이 없으면 정기권이 없는 것으로 처리합니다.
+
+## 3. 입출차 기록 CSV (일일 정산 입력)
+
+| 열 | 필수 | 값 |
+|---|---|---|
+| lot_id | 예 | HJ-01 등 |
+| plate | 예 | 차량번호 |
+| entry_at | 예 | ISO 8601, 예: 2026-09-01T09:00:00 |
+| exit_at | 예 | ISO 8601 |
+| vehicle_type | 아니오 | general(기본), compact, low-emission |
+| reduction | 아니오 | none(기본), disabled, veteran |
+| member | 아니오 | Y 또는 N(기본) |
+
+인코딩은 UTF-8, 첫 줄은 헤더입니다. 샘플: `data/samples/sessions_2026-09-01.csv`

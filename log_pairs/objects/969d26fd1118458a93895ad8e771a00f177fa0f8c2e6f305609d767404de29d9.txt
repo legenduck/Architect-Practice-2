@@ -1,0 +1,48 @@
+"""입출차 기록 CSV 읽기(일일 정산 배치용)."""
+
+from __future__ import annotations
+
+import csv
+from collections.abc import Sequence
+from pathlib import Path
+
+from parkfee.domain.errors import DataFileError, ParkfeeError
+from parkfee.domain.session import ParkingSession
+from parkfee.domain.vehicle import ReductionType, VehicleType
+from parkfee.infrastructure.timeparse import parse_datetime
+
+REQUIRED_COLUMNS = ("lot_id", "plate", "entry_at", "exit_at")
+
+
+class CsvSessionReader:
+    """CSV 한 줄을 ParkingSession 1건으로 읽는다. 열 정의는 data-model.md 참고."""
+
+    def read(self, path: Path) -> list[ParkingSession]:
+        try:
+            with path.open(encoding="utf-8", newline="") as stream:
+                reader = csv.DictReader(stream)
+                self._check_columns(reader.fieldnames, path)
+                return [self._parse(row, line) for line, row in enumerate(reader, start=2)]
+        except FileNotFoundError:
+            raise DataFileError(f"입출차 기록 파일이 없습니다: {path}") from None
+
+    @staticmethod
+    def _check_columns(fieldnames: Sequence[str] | None, path: Path) -> None:
+        missing = [column for column in REQUIRED_COLUMNS if column not in (fieldnames or [])]
+        if missing:
+            raise DataFileError(f"{path}: 필수 열이 없습니다: {', '.join(missing)}")
+
+    @staticmethod
+    def _parse(row: dict[str, str], line: int) -> ParkingSession:
+        try:
+            return ParkingSession(
+                lot_id=row["lot_id"],
+                plate=row["plate"],
+                entry_at=parse_datetime(row["entry_at"]),
+                exit_at=parse_datetime(row["exit_at"]),
+                vehicle_type=VehicleType(row.get("vehicle_type") or "general"),
+                reduction=ReductionType(row.get("reduction") or "none"),
+                is_member=(row.get("member") or "N").upper() == "Y",
+            )
+        except (ValueError, ParkfeeError) as error:
+            raise DataFileError(f"{line}번째 줄을 읽을 수 없습니다: {error}") from None

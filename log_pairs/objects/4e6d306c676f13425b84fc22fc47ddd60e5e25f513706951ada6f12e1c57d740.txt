@@ -1,0 +1,10 @@
+# 기본 담당
+*                         @hangyeol/settlement-platform
+
+# 요금·할인 계산은 기획팀 리뷰 필수
+/src/parkfee/pricing/     @hangyeol/settlement-platform @hangyeol/service-planning
+/data/fee_schedules.json  @hangyeol/settlement-platform @hangyeol/service-planning
+
+# 운영 규정·법규 문서
+/docs/policy/             @hangyeol/service-planning
+/docs/legal/              @hangyeol/legal

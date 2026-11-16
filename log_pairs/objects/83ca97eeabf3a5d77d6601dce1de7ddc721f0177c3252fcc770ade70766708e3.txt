@@ -1,0 +1,80 @@
+"""할인 정책과 파이프라인(할인·감면 규정 제2~3장, ADR-003)."""
+
+from __future__ import annotations
+
+from parkfee.domain.money import Money
+from parkfee.domain.receipt import AppliedDiscount, DiscountKind
+from parkfee.domain.vehicle import ReductionType, VehicleType
+from parkfee.pricing.discount import (
+    DiscountContext,
+    DiscountPolicy,
+    MembershipPolicy,
+    ReductionPolicy,
+)
+from parkfee.pricing.pipeline import DiscountPipeline
+from tests.conftest import STATION, TOWER, SessionFactory
+
+RATES = {"disabled": 50, "veteran": 50, "compact": 30, "low-emission": 30}
+
+
+def test_no_reduction_for_general_vehicle(make_session: SessionFactory) -> None:
+    context = DiscountContext(session=make_session(60), lot=TOWER)
+    assert ReductionPolicy(RATES).apply(Money(3500), context) is None
+
+
+def test_reduction_applies_single_rate(make_session: SessionFactory) -> None:
+    context = DiscountContext(make_session(60, vehicle_type=VehicleType.COMPACT), TOWER)
+    discount = ReductionPolicy(RATES).apply(Money(7000), context)
+    assert discount == AppliedDiscount(DiscountKind.REDUCTION, "경형 자동차 감면 30%", Money(2100))
+
+
+def test_only_the_largest_reduction_applies(make_session: SessionFactory) -> None:
+    """제2장: 감면 대상이 둘 이상이면 감면율이 가장 큰 하나만 적용한다."""
+    session = make_session(60, vehicle_type=VehicleType.COMPACT, reduction=ReductionType.DISABLED)
+    discount = ReductionPolicy(RATES).apply(Money(7000), DiscountContext(session, TOWER))
+    assert discount is not None
+    assert discount.name == "장애인 감면 50%"
+    assert discount.amount == Money(3500)
+
+
+def test_zero_rate_reduction_is_ignored(make_session: SessionFactory) -> None:
+    session = make_session(60, vehicle_type=VehicleType.LOW_EMISSION)
+    policy = ReductionPolicy({**RATES, "low-emission": 0})
+    assert policy.apply(Money(3500), DiscountContext(session, TOWER)) is None
+
+
+def test_membership_applies_to_members_only(make_session: SessionFactory) -> None:
+    policy = MembershipPolicy()
+    assert policy.apply(Money(4900), DiscountContext(make_session(60), TOWER)) is None
+    discount = policy.apply(Money(4900), DiscountContext(make_session(60, is_member=True), TOWER))
+    assert discount == AppliedDiscount(DiscountKind.MEMBERSHIP, "한결 멤버십 10%", Money(490))
+
+
+def test_membership_skipped_when_lot_rate_is_zero(make_session: SessionFactory) -> None:
+    """제3장: 환승주차장(HJ-03)은 멤버십 할인 대상이 아니다."""
+    session = make_session(60, lot_id="HJ-03", is_member=True)
+    assert MembershipPolicy().apply(Money(6000), DiscountContext(session, STATION)) is None
+
+
+class _FixedDiscount(DiscountPolicy):
+    def __init__(self, amount: int) -> None:
+        self._amount = amount
+
+    def apply(self, amount: Money, context: DiscountContext) -> AppliedDiscount | None:
+        return AppliedDiscount(DiscountKind.MEMBERSHIP, "고정", Money(self._amount))
+
+
+def test_pipeline_applies_policies_cumulatively(make_session: SessionFactory) -> None:
+    """요금 규정 제9조: 감면 후 금액에 멤버십 할인을 적용한다."""
+    session = make_session(125, vehicle_type=VehicleType.COMPACT, is_member=True)
+    pipeline = DiscountPipeline([ReductionPolicy(RATES), MembershipPolicy()])
+    result = pipeline.run(Money(7000), DiscountContext(session, TOWER))
+    assert result.amount == Money(4410)
+    assert [discount.amount for discount in result.applied] == [Money(2100), Money(490)]
+
+
+def test_pipeline_skips_missing_and_zero_discounts(make_session: SessionFactory) -> None:
+    pipeline = DiscountPipeline([ReductionPolicy(RATES), _FixedDiscount(0), _FixedDiscount(300)])
+    result = pipeline.run(Money(1000), DiscountContext(make_session(60), TOWER))
+    assert result.amount == Money(700)
+    assert len(result.applied) == 1

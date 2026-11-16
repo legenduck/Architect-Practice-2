@@ -1,0 +1,10 @@
+"""차량번호 처리. 로그·화면에는 마스킹한 번호만 남긴다(개인정보 처리방침)."""
+
+from __future__ import annotations
+
+
+def mask_plate(plate: str) -> str:
+    """차량번호 뒤 4자리를 *로 가린다. 예: 12가3456 -> 12가****"""
+    if len(plate) <= 4:
+        return "*" * len(plate)
+    return plate[:-4] + "****"

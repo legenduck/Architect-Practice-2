@@ -1,0 +1,26 @@
+"""시각 해석(KST, 타임존 없음)."""
+
+from datetime import date, datetime
+
+import pytest
+
+from parkfee.domain.errors import InvalidTimeFormatError
+from parkfee.infrastructure.timeparse import parse_date, parse_datetime
+
+
+@pytest.mark.parametrize("text", ["2026-09-01T09:00", "2026-09-01 09:00", " 2026-09-01T09:00:00 "])
+def test_parse_datetime_accepts_iso_formats(text: str) -> None:
+    assert parse_datetime(text) == datetime(2026, 9, 1, 9, 0)
+
+
+@pytest.mark.parametrize("text", ["2026/09/01 09:00", "어제", "2026-09-01T09:00+09:00"])
+def test_parse_datetime_rejects_other_formats(text: str) -> None:
+    with pytest.raises(InvalidTimeFormatError) as error:
+        parse_datetime(text)
+    assert error.value.code == "E1002"
+
+
+def test_parse_date() -> None:
+    assert parse_date("2026-09-30") == date(2026, 9, 30)
+    with pytest.raises(InvalidTimeFormatError):
+        parse_date("2026-13-01")

@@ -1,0 +1,30 @@
+{
+  "status": "passed",
+  "added_test_functions": 5,
+  "suites": {
+    "regression": {
+      "status": "passed",
+      "tests": 110,
+      "passed": 110,
+      "failed": 0,
+      "skipped": 0
+    },
+    "coupon": {
+      "status": "passed",
+      "tests": 12,
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "submitted_tests": {
+      "status": "passed",
+      "tests": 118,
+      "passed": 118,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "run_id": "20261116-133748-565264-58b2cf5b",
+  "source_sha256": "09b2897a140edcec951b2350668640131f196dbdd2ffe175701eb3545c5aa18e",
+  "engine": "docker"
+}

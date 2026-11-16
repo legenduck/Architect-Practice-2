@@ -1,0 +1,52 @@
+"""parkfee 예외 정의.
+
+모든 예외는 오류 코드(code)와 CLI 종료 코드(exit_code)를 가진다.
+오류 코드 표는 docs/development/logging-and-errors.md 를 따른다.
+"""
+
+from __future__ import annotations
+
+
+class ParkfeeError(Exception):
+    """parkfee 예외의 기본 클래스."""
+
+    code = "E0000"
+    exit_code = 3
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+    def __str__(self) -> str:
+        return f"[{self.code}] {self.message}"
+
+
+class InvalidSessionError(ParkfeeError):
+    """주차 세션 값이 올바르지 않다."""
+
+    code = "E1001"
+
+
+class InvalidTimeFormatError(ParkfeeError):
+    """시각 문자열을 해석할 수 없다."""
+
+    code = "E1002"
+
+
+class UnknownLotError(ParkfeeError):
+    """등록되지 않은 주차장이다."""
+
+    code = "E1003"
+
+
+class CouponNotFoundError(ParkfeeError):
+    """쿠폰 코드를 찾을 수 없다."""
+
+    code = "E2001"
+
+
+class DataFileError(ParkfeeError):
+    """데이터 파일을 읽을 수 없거나 형식이 잘못되었다."""
+
+    code = "E3001"
+    exit_code = 4

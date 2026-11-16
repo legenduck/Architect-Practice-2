@@ -1,0 +1,47 @@
+"""주차 세션과 주차 시간 산정(요금 규정 제4조)."""
+
+from datetime import datetime
+
+import pytest
+
+from parkfee.domain.errors import InvalidSessionError
+from parkfee.domain.plate import mask_plate
+from parkfee.domain.session import ParkingSession
+
+
+def _session(entry: str, exit_: str, plate: str = "12가3456") -> ParkingSession:
+    return ParkingSession(
+        lot_id="HJ-01",
+        plate=plate,
+        entry_at=datetime.fromisoformat(entry),
+        exit_at=datetime.fromisoformat(exit_),
+    )
+
+
+def test_parked_minutes_rounds_up_partial_minute() -> None:
+    """요금 규정 제4조: 1분 미만은 1분으로 올린다."""
+    assert _session("2026-09-01T09:00:00", "2026-09-01T09:10:00").parked_minutes == 10
+    assert _session("2026-09-01T09:00:00", "2026-09-01T09:10:01").parked_minutes == 11
+
+
+def test_same_entry_and_exit_is_zero_minutes() -> None:
+    assert _session("2026-09-01T09:00", "2026-09-01T09:00").parked_minutes == 0
+
+
+def test_exit_before_entry_is_rejected() -> None:
+    with pytest.raises(InvalidSessionError) as error:
+        _session("2026-09-01T10:00", "2026-09-01T09:00")
+    assert error.value.code == "E1001"
+
+
+def test_blank_plate_is_rejected() -> None:
+    with pytest.raises(InvalidSessionError):
+        _session("2026-09-01T09:00", "2026-09-01T10:00", plate="  ")
+
+
+@pytest.mark.parametrize(
+    ("plate", "masked"),
+    [("12가3456", "12가****"), ("123가4567", "123가****"), ("1234", "****")],
+)
+def test_mask_plate(plate: str, masked: str) -> None:
+    assert mask_plate(plate) == masked

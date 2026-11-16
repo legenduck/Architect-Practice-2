@@ -1,0 +1,38 @@
+"""할인 파이프라인(ADR-003). 등록 순서대로 누적 적용한다."""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Sequence
+from dataclasses import dataclass
+
+from parkfee.domain.money import Money
+from parkfee.domain.receipt import AppliedDiscount
+from parkfee.pricing.discount import DiscountContext, DiscountPolicy
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class PipelineResult:
+    amount: Money
+    applied: tuple[AppliedDiscount, ...]
+
+
+class DiscountPipeline:
+    """할인 정책을 순서대로 적용한다. 각 정책은 앞 정책이 적용된 금액을 받는다."""
+
+    def __init__(self, policies: Sequence[DiscountPolicy]) -> None:
+        self._policies = tuple(policies)
+
+    def run(self, amount: Money, context: DiscountContext) -> PipelineResult:
+        current = amount
+        applied: list[AppliedDiscount] = []
+        for policy in self._policies:
+            discount = policy.apply(current, context)
+            if discount is None or discount.amount.is_zero:
+                continue
+            logger.debug("%s: %s -> %s", discount.name, current, current.minus(discount.amount))
+            applied.append(discount)
+            current = current.minus(discount.amount)
+        return PipelineResult(amount=current, applied=tuple(applied))

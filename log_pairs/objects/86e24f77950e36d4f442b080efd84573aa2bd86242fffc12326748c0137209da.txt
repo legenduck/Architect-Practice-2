@@ -1,0 +1,51 @@
+# 문서 안내
+
+parkfee 관련 문서 목록입니다. 문서끼리 내용이 다르면 **운영 규정(docs/policy) > 아키텍처·API 명세 > 회의록·FAQ·변경 이력** 순으로 우선합니다.
+
+## 기획 (docs/product)
+- [서비스 개요](product/overview.md): 회사, 운영 주차장, 시스템 구성과 parkfee의 범위
+- [요구사항 명세](product/requirements.md): 기능·비기능 요구사항 목록과 상태
+- [유스케이스](product/use-cases.md): 출차 정산, 회차, 정기권, 감면, 일일 정산, 쿠폰 조회
+- [용어집](product/glossary.md)
+
+## 운영 규정 (docs/policy)
+- [요금 규정](policy/fee-policy.md)
+- [할인·감면 규정](policy/discount-policy.md)
+- [정기권 규정](policy/season-pass-policy.md)
+- [제휴 쿠폰 발급·정산 절차](policy/partner-coupon-issuance.md)
+- [운영 시간 및 출입 규정](policy/operating-hours.md)
+- [고객 응대 FAQ](policy/customer-faq.md)
+
+## 법규·컴플라이언스 (docs/legal)
+- [관련 법규 요약](legal/regulations-summary.md)
+- [개인정보 처리방침](legal/privacy-policy.md)
+- [고정형 영상정보처리기기 운영·관리 방침](legal/cctv-policy.md)
+- [장애인전용주차구역 운영 지침](legal/accessible-parking.md)
+
+## 아키텍처 (docs/architecture)
+- [아키텍처 개요](architecture/overview.md)
+- [데이터 모델](architecture/data-model.md)
+- ADR: [001 요금 계산 Strategy](architecture/adr/ADR-001-charge-strategy.md), [002 Money 값 객체](architecture/adr/ADR-002-money-value-object.md), [003 할인 파이프라인](architecture/adr/ADR-003-discount-pipeline.md), [004 데이터 파일 분리](architecture/adr/ADR-004-data-files.md)
+
+## 개발 (docs/development)
+- [개발 환경 설정](development/setup.md)
+- [코딩 컨벤션](development/coding-convention.md)
+- [테스트 전략](development/testing-strategy.md)
+- [코드 리뷰 가이드](development/code-review.md)
+- [브랜치·커밋 규칙](development/git-workflow.md)
+- [로깅·에러 처리](development/logging-and-errors.md)
+
+## API (docs/api)
+- [CLI 명세](api/cli.md)
+
+## 운영 (docs/operations)
+- [배포 절차](operations/deployment.md)
+- [장애 대응 런북](operations/incident-runbook.md)
+- [모니터링·알림](operations/monitoring.md)
+- [일일 정산 마감 절차](operations/daily-settlement.md)
+
+## 기록 (docs/records)
+- [회의록 2026-07-02 요금 개편](records/meeting-2026-07-02-fee-revision.md)
+- [회의록 2026-08-12 쿠폰 정산 반영](records/meeting-2026-08-12-coupon.md)
+- [장애 보고서 2026-05 정산 불일치](records/postmortem-2026-05-settlement-mismatch.md)
+- [신규 입사자 온보딩 체크리스트](records/onboarding-checklist.md)

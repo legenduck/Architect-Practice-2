@@ -1,0 +1,42 @@
+[
+  {
+    "id": "C01",
+    "total": 27000,
+    "coupon_status": "applied"
+  },
+  {
+    "id": "C02",
+    "total": 5000,
+    "coupon_status": "applied"
+  },
+  {
+    "id": "C03",
+    "total": 3700,
+    "coupon_status": "unused"
+  },
+  {
+    "id": "C04",
+    "total": 0,
+    "coupon_status": "unused"
+  },
+  {
+    "id": "C05",
+    "total": 3000,
+    "coupon_status": "expired"
+  },
+  {
+    "id": "C06",
+    "total": 0,
+    "coupon_status": "applied"
+  },
+  {
+    "id": "C07",
+    "total": 0,
+    "coupon_status": "applied"
+  },
+  {
+    "id": "C08",
+    "total": 8500,
+    "coupon_status": "unused"
+  }
+]

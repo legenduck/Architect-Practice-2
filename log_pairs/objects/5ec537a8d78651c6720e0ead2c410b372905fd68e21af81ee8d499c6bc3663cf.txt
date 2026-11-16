@@ -1,0 +1,38 @@
+"""일일 정산(UC-05)."""
+
+from parkfee.application.checkout import CheckoutService
+from parkfee.application.settlement import DailySettlementService
+from parkfee.domain.money import Money
+from parkfee.pricing.schedule import PricingConfig
+from tests.conftest import FakeSeasonPassRepository, SessionFactory
+
+
+def test_settlement_groups_by_lot(
+    pricing_config: PricingConfig, make_session: SessionFactory
+) -> None:
+    service = DailySettlementService(CheckoutService(pricing_config, FakeSeasonPassRepository()))
+    report = service.settle(
+        [
+            make_session(60, lot_id="HJ-02", is_member=True),
+            make_session(5),
+            make_session(125),
+        ]
+    )
+    tower, mall = report.lots
+    assert (tower.lot_id, tower.sessions, tower.free_sessions) == ("HJ-01", 2, 1)
+    assert (tower.charge, tower.discount, tower.revenue) == (Money(7000), Money(0), Money(7000))
+    assert (mall.lot_id, mall.charge, mall.discount, mall.revenue) == (
+        "HJ-02",
+        Money(3000),
+        Money(300),
+        Money(2700),
+    )
+    assert report.total_sessions == 3
+    assert report.total_revenue == Money(9700)
+
+
+def test_empty_settlement(pricing_config: PricingConfig) -> None:
+    service = DailySettlementService(CheckoutService(pricing_config, FakeSeasonPassRepository()))
+    report = service.settle([])
+    assert report.lots == ()
+    assert report.total_revenue == Money.zero()

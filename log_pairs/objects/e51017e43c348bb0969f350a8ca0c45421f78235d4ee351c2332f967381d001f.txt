@@ -1,0 +1,53 @@
+"""쿠폰과 정기권 엔터티."""
+
+from datetime import date, datetime
+
+from parkfee.domain.coupon import Coupon, CouponKind
+from parkfee.domain.season_pass import SeasonPass
+from parkfee.domain.session import ParkingSession
+
+
+def _coupon(kind: CouponKind, value: int) -> Coupon:
+    return Coupon(
+        code="HJM-2609-0001",
+        kind=kind,
+        value=value,
+        lot_id="HJ-02",
+        partner="한결시네마",
+        valid_from=datetime(2026, 9, 1, 0, 0),
+        valid_until=datetime(2026, 9, 30, 23, 59, 59),
+    )
+
+
+def test_coupon_validity_includes_both_ends() -> None:
+    coupon = _coupon(CouponKind.TIME, 60)
+    assert coupon.is_valid_at(datetime(2026, 9, 1, 0, 0))
+    assert coupon.is_valid_at(datetime(2026, 9, 30, 23, 59, 59))
+    assert not coupon.is_valid_at(datetime(2026, 10, 1, 0, 0))
+    assert not coupon.is_valid_at(datetime(2026, 8, 31, 23, 59))
+
+
+def test_coupon_description() -> None:
+    assert _coupon(CouponKind.TIME, 60).describe() == "한결시네마 무료 주차 60분"
+    assert _coupon(CouponKind.AMOUNT, 1000).describe() == "한결시네마 1,000원 할인"
+
+
+def _session(lot_id: str, entry: str, exit_: str) -> ParkingSession:
+    return ParkingSession(
+        lot_id=lot_id,
+        plate="34나5678",
+        entry_at=datetime.fromisoformat(entry),
+        exit_at=datetime.fromisoformat(exit_),
+    )
+
+
+def test_season_pass_covers_session_inside_period() -> None:
+    season_pass = SeasonPass("34나5678", "HJ-01", date(2026, 9, 1), date(2026, 9, 30))
+    assert season_pass.covers(_session("HJ-01", "2026-09-01T08:00", "2026-09-01T19:00"))
+
+
+def test_season_pass_does_not_cover_other_lot_or_period() -> None:
+    season_pass = SeasonPass("34나5678", "HJ-01", date(2026, 9, 1), date(2026, 9, 30))
+    assert not season_pass.covers(_session("HJ-02", "2026-09-01T08:00", "2026-09-01T19:00"))
+    assert not season_pass.covers(_session("HJ-01", "2026-08-31T20:00", "2026-09-01T08:00"))
+    assert not season_pass.covers(_session("HJ-01", "2026-09-30T20:00", "2026-10-01T08:00"))

@@ -1,0 +1,107 @@
+"""출력 형식(docs/api/cli.md)."""
+
+from __future__ import annotations
+
+import json
+from datetime import datetime
+
+import pytest
+
+from parkfee.application.checkout import CheckoutService
+from parkfee.application.settlement import DailySettlementService
+from parkfee.domain.coupon import Coupon, CouponKind
+from parkfee.domain.vehicle import VehicleType
+from parkfee.presentation.formatters import (
+    JsonFormatter,
+    TextFormatter,
+    create_formatter,
+    format_minutes,
+)
+from parkfee.pricing.schedule import PricingConfig
+from tests.conftest import FakeSeasonPassRepository, SessionFactory
+
+
+@pytest.fixture
+def service(pricing_config: PricingConfig) -> CheckoutService:
+    return CheckoutService(pricing_config, FakeSeasonPassRepository())
+
+
+COUPON = Coupon(
+    code="HJM-2609-0003",
+    kind=CouponKind.AMOUNT,
+    value=1000,
+    lot_id="HJ-02",
+    partner="카페 온새미로",
+    valid_from=datetime(2026, 9, 1),
+    valid_until=datetime(2026, 9, 30, 23, 59, 59),
+)
+
+
+@pytest.mark.parametrize(("minutes", "text"), [(5, "5분"), (60, "1시간 0분"), (125, "2시간 5분")])
+def test_format_minutes(minutes: int, text: str) -> None:
+    assert format_minutes(minutes) == text
+
+
+def test_text_receipt_lists_discounts(
+    service: CheckoutService, make_session: SessionFactory
+) -> None:
+    receipt = service.checkout(make_session(125, vehicle_type=VehicleType.COMPACT, is_member=True))
+    text = TextFormatter().receipt(receipt)
+    assert "주차요금 : 7,000원" in text
+    assert "할인     : 경형 자동차 감면 30% -2,100원" in text
+    assert "결제금액 : 4,400원 (공급가액 4,000원 / 부가세 400원)" in text
+
+
+def test_text_receipt_for_free_exits(
+    service: CheckoutService, make_session: SessionFactory
+) -> None:
+    assert "회차 차량 (무료)" in TextFormatter().receipt(service.checkout(make_session(3)))
+
+
+def test_text_receipt_for_season_pass(
+    pricing_config: PricingConfig, make_session: SessionFactory
+) -> None:
+    from datetime import date
+
+    from parkfee.domain.season_pass import SeasonPass
+
+    passes = FakeSeasonPassRepository(
+        [SeasonPass("12가3456", "HJ-01", date(2026, 9, 1), date(2026, 9, 30))]
+    )
+    receipt = CheckoutService(pricing_config, passes).checkout(make_session(300))
+    assert "정기권 차량 (무료)" in TextFormatter().receipt(receipt)
+
+
+def test_json_receipt_schema(service: CheckoutService, make_session: SessionFactory) -> None:
+    receipt = service.checkout(make_session(125, vehicle_type=VehicleType.COMPACT, is_member=True))
+    payload = json.loads(JsonFormatter().receipt(receipt))
+    assert payload["lot_id"] == "HJ-01"
+    assert payload["parked_minutes"] == 125
+    assert payload["charge"] == 7000
+    assert [item["type"] for item in payload["discounts"]] == ["reduction", "membership"]
+    assert payload["total"] == 4400
+    assert payload["vat"] == {"supply": 4000, "tax": 400}
+    assert payload["grace"] is False
+    assert payload["season_pass"] is False
+
+
+def test_settlement_formats(service: CheckoutService, make_session: SessionFactory) -> None:
+    report = DailySettlementService(service).settle([make_session(125), make_session(3)])
+    text = TextFormatter().settlement(report)
+    assert "HJ-01 한결타워: 2건(무료 1건)" in text
+    assert "합계: 2건, 매출 7,000원" in text
+    payload = json.loads(JsonFormatter().settlement(report))
+    assert payload["total_revenue"] == 7000
+    assert payload["lots"][0]["free_sessions"] == 1
+
+
+def test_coupon_formats() -> None:
+    assert "카페 온새미로 1,000원 할인" in TextFormatter().coupon(COUPON)
+    payload = json.loads(JsonFormatter().coupon(COUPON))
+    assert payload["kind"] == "amount"
+    assert payload["valid_until"] == "2026-09-30T23:59:59"
+
+
+def test_create_formatter() -> None:
+    assert isinstance(create_formatter("text"), TextFormatter)
+    assert isinstance(create_formatter("json"), JsonFormatter)

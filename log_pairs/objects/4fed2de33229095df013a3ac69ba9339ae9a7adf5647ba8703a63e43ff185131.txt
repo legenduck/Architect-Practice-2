@@ -1,0 +1,127 @@
+"""parkfee 명령줄 도구. 명령 명세는 docs/api/cli.md 를 따른다."""
+
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+from collections.abc import Sequence
+from pathlib import Path
+
+from parkfee import __version__
+from parkfee.application.checkout import CheckoutService
+from parkfee.application.settlement import DailySettlementService
+from parkfee.domain.errors import ParkfeeError
+from parkfee.domain.session import ParkingSession
+from parkfee.domain.vehicle import ReductionType, VehicleType
+from parkfee.infrastructure.csv_sessions import CsvSessionReader
+from parkfee.infrastructure.data_dir import DataDirectory
+from parkfee.infrastructure.json_store import (
+    JsonCouponRepository,
+    JsonPricingConfigLoader,
+    JsonSeasonPassRepository,
+)
+from parkfee.infrastructure.timeparse import parse_datetime
+from parkfee.presentation.formatters import FORMATTERS, create_formatter
+from parkfee.presentation.logging_config import configure_logging
+
+DEFAULT_DATA_DIR = "data"
+LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="parkfee", description="한결파킹 주차요금 정산 엔진")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    parser.add_argument(
+        "--data-dir",
+        default=os.environ.get("PARKFEE_DATA_DIR", DEFAULT_DATA_DIR),
+        help="요금표·쿠폰·정기권 데이터 디렉터리 (기본: data, 환경 변수 PARKFEE_DATA_DIR)",
+    )
+    parser.add_argument("--log-level", default="WARNING", choices=LOG_LEVELS)
+    commands = parser.add_subparsers(dest="command", required=True)
+    _add_calc_command(commands)
+    _add_batch_command(commands)
+    _add_coupon_command(commands)
+    return parser
+
+
+def _add_format_option(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--format", choices=sorted(FORMATTERS), default="text")
+
+
+def _add_calc_command(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    calc = commands.add_parser("calc", help="출차 1건의 요금을 계산한다")
+    calc.add_argument("--lot", required=True, help="주차장 ID (예: HJ-01)")
+    calc.add_argument("--plate", required=True, help="차량번호")
+    calc.add_argument("--entry", required=True, help="입차 시각 (예: 2026-09-01T09:00)")
+    calc.add_argument("--exit", required=True, dest="exit_at", help="출차 시각")
+    calc.add_argument(
+        "--vehicle-type", choices=[item.value for item in VehicleType], default="general"
+    )
+    calc.add_argument("--reduction", choices=[item.value for item in ReductionType], default="none")
+    calc.add_argument("--member", action="store_true", help="한결 멤버십 회원")
+    _add_format_option(calc)
+    calc.set_defaults(handler=_run_calc)
+
+
+def _add_batch_command(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    batch = commands.add_parser("batch", help="입출차 기록 CSV로 일일 정산 리포트를 만든다")
+    batch.add_argument("sessions_csv", help="입출차 기록 CSV 경로")
+    _add_format_option(batch)
+    batch.set_defaults(handler=_run_batch)
+
+
+def _add_coupon_command(commands: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    coupon = commands.add_parser("coupon", help="제휴 쿠폰 조회")
+    coupon_commands = coupon.add_subparsers(dest="coupon_command", required=True)
+    show = coupon_commands.add_parser("show", help="쿠폰 정보를 조회한다")
+    show.add_argument("code", help="쿠폰 코드")
+    _add_format_option(show)
+    show.set_defaults(handler=_run_coupon_show)
+
+
+def _build_checkout(data_dir: DataDirectory) -> CheckoutService:
+    config = JsonPricingConfigLoader().load(data_dir.fee_schedules)
+    season_passes = JsonSeasonPassRepository(data_dir.season_passes)
+    return CheckoutService(config, season_passes)
+
+
+def _run_calc(args: argparse.Namespace) -> int:
+    data_dir = DataDirectory(Path(args.data_dir))
+    session = ParkingSession(
+        lot_id=args.lot,
+        plate=args.plate,
+        entry_at=parse_datetime(args.entry),
+        exit_at=parse_datetime(args.exit_at),
+        vehicle_type=VehicleType(args.vehicle_type),
+        reduction=ReductionType(args.reduction),
+        is_member=args.member,
+    )
+    receipt = _build_checkout(data_dir).checkout(session)
+    print(create_formatter(args.format).receipt(receipt))
+    return 0
+
+
+def _run_batch(args: argparse.Namespace) -> int:
+    data_dir = DataDirectory(Path(args.data_dir))
+    sessions = CsvSessionReader().read(Path(args.sessions_csv))
+    report = DailySettlementService(_build_checkout(data_dir)).settle(sessions)
+    print(create_formatter(args.format).settlement(report))
+    return 0
+
+
+def _run_coupon_show(args: argparse.Namespace) -> int:
+    data_dir = DataDirectory(Path(args.data_dir))
+    coupon = JsonCouponRepository(data_dir.coupons).find(args.code)
+    print(create_formatter(args.format).coupon(coupon))
+    return 0
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    configure_logging(args.log_level)
+    try:
+        return int(args.handler(args))
+    except ParkfeeError as error:
+        print(str(error), file=sys.stderr)
+        return error.exit_code

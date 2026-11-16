@@ -1,0 +1,59 @@
+"""요금 계산 방식(Strategy, ADR-001).
+
+주차장마다 요금 방식이 달라 ChargeStrategy 구현을 바꿔 끼운다.
+"""
+
+from __future__ import annotations
+
+import math
+from abc import ABC, abstractmethod
+
+from parkfee.domain.money import Money
+from parkfee.pricing.schedule import DailyFlatSchedule, Schedule, StandardSchedule
+
+MINUTES_PER_DAY = 24 * 60
+
+
+class ChargeStrategy(ABC):
+    """주차 시간(분)을 받아 할인 전 요금을 계산한다."""
+
+    @abstractmethod
+    def charge(self, minutes: int) -> Money:
+        raise NotImplementedError
+
+
+class StandardChargeStrategy(ChargeStrategy):
+    """기본 요금 + 단위 요금, 입차 시각부터 24시간마다 일 최대 요금을 적용한다."""
+
+    def __init__(self, schedule: StandardSchedule) -> None:
+        self._schedule = schedule
+
+    def charge(self, minutes: int) -> Money:
+        full_days, remainder = divmod(minutes, MINUTES_PER_DAY)
+        return self._schedule.daily_max.times(full_days) + self._partial_day(remainder)
+
+    def _partial_day(self, minutes: int) -> Money:
+        if minutes == 0:
+            return Money.zero()
+        extra_minutes = max(0, minutes - self._schedule.base_minutes)
+        units = math.ceil(extra_minutes / self._schedule.unit_minutes)
+        raw = self._schedule.base_fee + self._schedule.unit_fee.times(units)
+        return min(raw, self._schedule.daily_max)
+
+
+class DailyFlatChargeStrategy(ChargeStrategy):
+    """시작된 24시간마다 정액을 부과한다."""
+
+    def __init__(self, schedule: DailyFlatSchedule) -> None:
+        self._schedule = schedule
+
+    def charge(self, minutes: int) -> Money:
+        days = math.ceil(minutes / MINUTES_PER_DAY)
+        return self._schedule.daily_fee.times(days)
+
+
+def create_charge_strategy(schedule: Schedule) -> ChargeStrategy:
+    """요금표 종류에 맞는 계산 방식을 만든다(Factory)."""
+    if isinstance(schedule, StandardSchedule):
+        return StandardChargeStrategy(schedule)
+    return DailyFlatChargeStrategy(schedule)

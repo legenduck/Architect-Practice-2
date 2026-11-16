@@ -1,0 +1,104 @@
+from dataclasses import replace
+from datetime import date, datetime, timedelta
+
+import pytest
+
+from parkfee.application.checkout import CheckoutService
+from parkfee.domain.coupon import Coupon, CouponKind
+from parkfee.domain.money import Money
+from parkfee.domain.receipt import CouponStatus
+from parkfee.domain.season_pass import SeasonPass
+from parkfee.domain.vehicle import ReductionType
+from tests.conftest import FakeSeasonPassRepository
+
+
+@pytest.fixture
+def coupon():
+    return Coupon(
+        "TEST",
+        CouponKind.TIME,
+        60,
+        "HJ-01",
+        "제휴점",
+        datetime(2026, 9, 1),
+        datetime(2026, 9, 30, 23, 59, 59),
+    )
+
+
+def test_time_coupon_recalculates_charge_and_does_not_reapply_grace(
+    pricing_config, make_session, coupon
+):
+    service = CheckoutService(pricing_config, FakeSeasonPassRepository())
+    receipt = service.checkout(make_session(65), coupon)
+    assert receipt.total == Money(2000)
+    assert receipt.coupon.status == CouponStatus.APPLIED
+    assert receipt.charge == Money(4000)
+    assert receipt.discount_total == Money(2000)
+    assert not receipt.grace_applied
+    assert service.checkout(make_session(60), coupon).total == Money.zero()
+
+
+def test_amount_coupon_after_daily_cap_and_floor(pricing_config, make_session, coupon):
+    coupon = replace(coupon, kind=CouponKind.AMOUNT, value=1001)
+    receipt = CheckoutService(pricing_config, FakeSeasonPassRepository()).checkout(
+        make_session(600), coupon
+    )
+    assert receipt.charge == Money(25000)
+    assert receipt.total == Money(23900)
+    assert receipt.coupon.status == CouponStatus.APPLIED
+    assert (
+        CheckoutService(pricing_config, FakeSeasonPassRepository())
+        .checkout(make_session(60), replace(coupon, value=99999))
+        .total
+        == Money.zero()
+    )
+
+
+def test_compare_after_rounding_and_do_not_stack(pricing_config, make_session, coupon):
+    service = CheckoutService(pricing_config, FakeSeasonPassRepository())
+    session = make_session(40, reduction=ReductionType.VETERAN)
+    tied = service.checkout(session, replace(coupon, kind=CouponKind.AMOUNT, value=1201))
+    assert tied.total == Money(1200)
+    assert tied.coupon.status == CouponStatus.UNUSED
+    better = service.checkout(session, replace(coupon, kind=CouponKind.AMOUNT, value=1400))
+    assert better.total == Money(1100)
+    assert better.coupon.status == CouponStatus.APPLIED
+    assert len(better.discounts) == 1
+    assert better.discounts[0].kind.value == "coupon"
+
+
+def test_validity_boundaries_and_other_lot(pricing_config, make_session, coupon):
+    service = CheckoutService(pricing_config, FakeSeasonPassRepository())
+    session = make_session(60)
+    for boundary in ("valid_from", "valid_until"):
+        assert (
+            service.checkout(session, replace(coupon, **{boundary: session.exit_at})).coupon.status
+            == CouponStatus.APPLIED
+        )
+    assert (
+        service.checkout(
+            session, replace(coupon, valid_from=session.exit_at + timedelta(seconds=1))
+        ).coupon.status
+        == CouponStatus.UNUSED
+    )
+    assert (
+        service.checkout(
+            session, replace(coupon, valid_until=session.exit_at - timedelta(seconds=1))
+        ).coupon.status
+        == CouponStatus.EXPIRED
+    )
+    assert (
+        service.checkout(session, replace(coupon, lot_id="HJ-02")).coupon.status
+        == CouponStatus.UNUSED
+    )
+
+
+def test_free_exits_return_coupon(pricing_config, make_session, coupon):
+    service = CheckoutService(pricing_config, FakeSeasonPassRepository())
+    assert service.checkout(make_session(10), coupon).coupon.status == CouponStatus.UNUSED
+    passes = FakeSeasonPassRepository(
+        [SeasonPass("12가3456", "HJ-01", date(2026, 9, 1), date(2026, 9, 30))]
+    )
+    receipt = CheckoutService(pricing_config, passes).checkout(make_session(60), coupon)
+    assert receipt.season_pass_applied
+    assert receipt.coupon.status == CouponStatus.UNUSED

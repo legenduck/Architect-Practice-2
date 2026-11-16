@@ -1,0 +1,40 @@
+"""주차 세션: 한 번의 입차부터 출차까지."""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+from datetime import datetime
+
+from parkfee.domain.errors import InvalidSessionError
+from parkfee.domain.vehicle import ReductionType, VehicleType
+
+SECONDS_PER_MINUTE = 60
+
+
+@dataclass(frozen=True)
+class ParkingSession:
+    """출차 정산의 입력. 시각은 모두 타임존 없는 KST로 다룬다."""
+
+    lot_id: str
+    plate: str
+    entry_at: datetime
+    exit_at: datetime
+    vehicle_type: VehicleType = VehicleType.GENERAL
+    reduction: ReductionType = ReductionType.NONE
+    is_member: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.plate.strip():
+            raise InvalidSessionError("차량번호가 비어 있습니다.")
+        if self.exit_at < self.entry_at:
+            raise InvalidSessionError(
+                f"출차 시각({self.exit_at:%Y-%m-%d %H:%M})이 "
+                f"입차 시각({self.entry_at:%Y-%m-%d %H:%M})보다 빠릅니다."
+            )
+
+    @property
+    def parked_minutes(self) -> int:
+        """주차 시간(분). 1분 미만은 올림한다(요금 규정 제4조)."""
+        seconds = (self.exit_at - self.entry_at).total_seconds()
+        return math.ceil(seconds / SECONDS_PER_MINUTE)

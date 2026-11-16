@@ -1,0 +1,65 @@
+[
+  {
+    "code": "HJM-2609-0001",
+    "kind": "time",
+    "value": 60,
+    "lot_id": "HJ-02",
+    "partner": "한결시네마",
+    "valid_from": "2026-09-01T00:00:00",
+    "valid_until": "2026-09-30T23:59:59"
+  },
+  {
+    "code": "HJM-2609-0002",
+    "kind": "time",
+    "value": 120,
+    "lot_id": "HJ-02",
+    "partner": "한결마트",
+    "valid_from": "2026-09-01T00:00:00",
+    "valid_until": "2026-09-30T23:59:59"
+  },
+  {
+    "code": "HJM-2609-0003",
+    "kind": "amount",
+    "value": 1000,
+    "lot_id": "HJ-02",
+    "partner": "카페 온새미로",
+    "valid_from": "2026-09-01T00:00:00",
+    "valid_until": "2026-09-30T23:59:59"
+  },
+  {
+    "code": "HJM-2609-0004",
+    "kind": "amount",
+    "value": 3000,
+    "lot_id": "HJ-02",
+    "partner": "책마루 서점",
+    "valid_from": "2026-09-01T00:00:00",
+    "valid_until": "2026-09-10T23:59:59"
+  },
+  {
+    "code": "HJM-2608-0107",
+    "kind": "time",
+    "value": 60,
+    "lot_id": "HJ-02",
+    "partner": "한결시네마",
+    "valid_from": "2026-08-01T00:00:00",
+    "valid_until": "2026-08-31T23:59:59"
+  },
+  {
+    "code": "HJT-2609-0001",
+    "kind": "time",
+    "value": 30,
+    "lot_id": "HJ-01",
+    "partner": "한결타워 라운지 카페",
+    "valid_from": "2026-09-01T00:00:00",
+    "valid_until": "2026-09-30T23:59:59"
+  },
+  {
+    "code": "HJT-2609-0002",
+    "kind": "amount",
+    "value": 2000,
+    "lot_id": "HJ-01",
+    "partner": "한결타워 컨퍼런스센터",
+    "valid_from": "2026-09-15T09:00:00",
+    "valid_until": "2026-09-15T18:00:00"
+  }
+]

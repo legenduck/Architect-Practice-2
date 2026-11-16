@@ -1,0 +1,23 @@
+"""데이터 디렉터리 구성(ADR-004)."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+
+@dataclass(frozen=True)
+class DataDirectory:
+    root: Path
+
+    @property
+    def fee_schedules(self) -> Path:
+        return self.root / "fee_schedules.json"
+
+    @property
+    def coupons(self) -> Path:
+        return self.root / "coupons.json"
+
+    @property
+    def season_passes(self) -> Path:
+        return self.root / "season_passes.json"

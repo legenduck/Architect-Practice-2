@@ -1,0 +1,27 @@
+"""월 정기권."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date
+
+from parkfee.domain.session import ParkingSession
+
+
+@dataclass(frozen=True)
+class SeasonPass:
+    """등록 차량 1대가 한 주차장을 기간 동안 무료로 이용하는 정기권."""
+
+    plate: str
+    lot_id: str
+    start_date: date
+    end_date: date
+
+    def covers(self, session: ParkingSession) -> bool:
+        """입차일과 출차일이 모두 정기권 기간 안이면 True."""
+        return (
+            session.plate == self.plate
+            and session.lot_id == self.lot_id
+            and self.start_date <= session.entry_at.date()
+            and session.exit_at.date() <= self.end_date
+        )

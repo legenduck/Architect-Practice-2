@@ -1,0 +1,113 @@
+"""공통 테스트 픽스처. 단위 테스트는 data/ 파일에 의존하지 않도록 설정을 코드로 만든다."""
+
+from __future__ import annotations
+
+import shutil
+from collections.abc import Callable, Iterable
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import pytest
+
+from parkfee.domain.money import Money
+from parkfee.domain.season_pass import SeasonPass
+from parkfee.domain.session import ParkingSession
+from parkfee.domain.vehicle import ReductionType, VehicleType
+from parkfee.infrastructure.data_dir import DataDirectory
+from parkfee.pricing.schedule import DailyFlatSchedule, LotPolicy, PricingConfig, StandardSchedule
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_ENTRY = datetime(2026, 9, 1, 9, 0)
+
+
+class FakeSeasonPassRepository:
+    """메모리 정기권 저장소."""
+
+    def __init__(self, passes: Iterable[SeasonPass] = ()) -> None:
+        self._passes = list(passes)
+
+    def find_by_plate(self, plate: str) -> list[SeasonPass]:
+        return [season_pass for season_pass in self._passes if season_pass.plate == plate]
+
+
+TOWER = LotPolicy(
+    lot_id="HJ-01",
+    name="한결타워",
+    schedule=StandardSchedule(
+        base_minutes=30,
+        base_fee=Money(2000),
+        unit_minutes=10,
+        unit_fee=Money(500),
+        daily_max=Money(25000),
+    ),
+    grace_minutes=10,
+    membership_rate=10,
+)
+MALL = LotPolicy(
+    lot_id="HJ-02",
+    name="한결몰",
+    schedule=StandardSchedule(
+        base_minutes=30,
+        base_fee=Money(1500),
+        unit_minutes=10,
+        unit_fee=Money(500),
+        daily_max=Money(30000),
+    ),
+    grace_minutes=15,
+    membership_rate=10,
+)
+STATION = LotPolicy(
+    lot_id="HJ-03",
+    name="한결역 환승주차장",
+    schedule=DailyFlatSchedule(daily_fee=Money(6000)),
+    grace_minutes=10,
+    membership_rate=0,
+)
+
+
+@pytest.fixture
+def pricing_config() -> PricingConfig:
+    return PricingConfig(
+        version="test",
+        rounding_unit=100,
+        reduction_rates={"disabled": 50, "veteran": 50, "compact": 30, "low-emission": 30},
+        lots={lot.lot_id: lot for lot in (TOWER, MALL, STATION)},
+    )
+
+
+SessionFactory = Callable[..., ParkingSession]
+
+
+@pytest.fixture
+def make_session() -> SessionFactory:
+    """주차 시간(분)으로 세션을 만든다. 입차 시각 기본값은 2026-09-01 09:00."""
+
+    def factory(
+        minutes: int,
+        *,
+        lot_id: str = "HJ-01",
+        plate: str = "12가3456",
+        entry_at: datetime = DEFAULT_ENTRY,
+        vehicle_type: VehicleType = VehicleType.GENERAL,
+        reduction: ReductionType = ReductionType.NONE,
+        is_member: bool = False,
+    ) -> ParkingSession:
+        return ParkingSession(
+            lot_id=lot_id,
+            plate=plate,
+            entry_at=entry_at,
+            exit_at=entry_at + timedelta(minutes=minutes),
+            vehicle_type=vehicle_type,
+            reduction=reduction,
+            is_member=is_member,
+        )
+
+    return factory
+
+
+@pytest.fixture
+def data_dir(tmp_path: Path) -> DataDirectory:
+    """저장소 data/ 를 임시 디렉터리로 복사한다. 테스트에서 파일을 바꿔도 원본은 그대로다."""
+    target = tmp_path / "data"
+    shutil.copytree(REPO_ROOT / "data", target)
+    return DataDirectory(target)

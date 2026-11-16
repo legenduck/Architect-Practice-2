@@ -1,0 +1,70 @@
+"""일일 정산 유스케이스(UC-05)."""
+
+from __future__ import annotations
+
+import logging
+from collections.abc import Iterable
+from dataclasses import dataclass
+
+from parkfee.application.checkout import CheckoutService
+from parkfee.domain.money import Money
+from parkfee.domain.receipt import Receipt
+from parkfee.domain.session import ParkingSession
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class LotSummary:
+    """주차장 1곳의 정산 집계."""
+
+    lot_id: str
+    lot_name: str
+    sessions: int = 0
+    free_sessions: int = 0
+    charge: Money = Money(0)
+    discount: Money = Money(0)
+    revenue: Money = Money(0)
+
+    def add(self, receipt: Receipt) -> None:
+        self.sessions += 1
+        if receipt.grace_applied or receipt.season_pass_applied:
+            self.free_sessions += 1
+        self.charge = self.charge + receipt.charge
+        self.discount = self.discount + receipt.discount_total
+        self.revenue = self.revenue + receipt.total
+
+
+@dataclass(frozen=True)
+class SettlementReport:
+    lots: tuple[LotSummary, ...]
+
+    @property
+    def total_sessions(self) -> int:
+        return sum(summary.sessions for summary in self.lots)
+
+    @property
+    def total_revenue(self) -> Money:
+        total = Money.zero()
+        for summary in self.lots:
+            total = total + summary.revenue
+        return total
+
+
+class DailySettlementService:
+    """입출차 기록 전체를 정산해 주차장별로 집계한다."""
+
+    def __init__(self, checkout: CheckoutService) -> None:
+        self._checkout = checkout
+
+    def settle(self, sessions: Iterable[ParkingSession]) -> SettlementReport:
+        summaries: dict[str, LotSummary] = {}
+        for session in sessions:
+            receipt = self._checkout.checkout(session)
+            summary = summaries.setdefault(
+                session.lot_id, LotSummary(lot_id=session.lot_id, lot_name=receipt.lot_name)
+            )
+            summary.add(receipt)
+        logger.debug("정산 집계 완료: 주차장 %d곳", len(summaries))
+        ordered = sorted(summaries.values(), key=lambda summary: summary.lot_id)
+        return SettlementReport(lots=tuple(ordered))

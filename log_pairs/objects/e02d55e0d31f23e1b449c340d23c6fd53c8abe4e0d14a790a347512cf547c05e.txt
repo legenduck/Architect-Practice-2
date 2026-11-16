@@ -1,0 +1,200 @@
+"""출차 정산 유스케이스(요금 규정 제5~11조, 할인·감면 규정 제2~3장)."""
+
+from __future__ import annotations
+
+from datetime import date
+
+import pytest
+
+from parkfee.application.checkout import CheckoutService
+from parkfee.domain.money import Money
+from parkfee.domain.season_pass import SeasonPass
+from parkfee.domain.vehicle import ReductionType, VehicleType
+from parkfee.pricing.pipeline import DiscountPipeline
+from parkfee.pricing.schedule import PricingConfig
+from tests.conftest import FakeSeasonPassRepository, SessionFactory
+
+
+@pytest.fixture
+def service(pricing_config: PricingConfig) -> CheckoutService:
+    return CheckoutService(pricing_config, FakeSeasonPassRepository())
+
+
+def test_general_vehicle_pays_full_charge(
+    service: CheckoutService, make_session: SessionFactory
+) -> None:
+    receipt = service.checkout(make_session(125))
+    assert receipt.charge == Money(7000)
+    assert receipt.discounts == ()
+    assert receipt.total == Money(7000)
+    assert (receipt.vat_supply, receipt.vat_tax) == (Money(6364), Money(636))
+
+
+def test_reduction_then_membership_then_rounding(
+    service: CheckoutService, make_session: SessionFactory
+) -> None:
+    """7,000원 → 경형 30% → 4,900원 → 멤버십 10% → 4,410원 → 절사 4,400원."""
+    session = make_session(125, vehicle_type=VehicleType.COMPACT, is_member=True)
+    receipt = service.checkout(session)
+    assert receipt.discount_total == Money(2590)
+    assert receipt.total == Money(4400)
+
+
+def test_rounding_applies_after_discounts(
+    service: CheckoutService, make_session: SessionFactory
+) -> None:
+    """2,500원 → 국가유공자 50% → 1,250원 → 절사 1,200원 (2026-05 정산 불일치 재발 방지)."""
+    receipt = service.checkout(make_session(40, reduction=ReductionType.VETERAN))
+    assert receipt.total == Money(1200)
+
+
+@pytest.mark.parametrize(("lot_id", "grace"), [("HJ-01", 10), ("HJ-02", 15), ("HJ-03", 10)])
+def test_exit_within_grace_period_is_free(
+    service: CheckoutService, make_session: SessionFactory, lot_id: str, grace: int
+) -> None:
+    """요금 규정 제5조: 회차 시간 이내 출차는 무료."""
+    receipt = service.checkout(make_session(grace, lot_id=lot_id))
+    assert receipt.grace_applied
+    assert receipt.total == Money.zero()
+    assert receipt.charge == Money.zero()
+
+
+@pytest.mark.parametrize(
+    ("lot_id", "grace", "first_fee"), [("HJ-01", 10, 2000), ("HJ-02", 15, 1500)]
+)
+def test_one_minute_over_grace_is_charged(
+    service: CheckoutService,
+    make_session: SessionFactory,
+    lot_id: str,
+    grace: int,
+    first_fee: int,
+) -> None:
+    receipt = service.checkout(make_session(grace + 1, lot_id=lot_id))
+    assert not receipt.grace_applied
+    assert receipt.total == Money(first_fee)
+
+
+def test_station_ignores_membership_but_applies_reduction(
+    service: CheckoutService, make_session: SessionFactory
+) -> None:
+    member = service.checkout(make_session(600, lot_id="HJ-03", is_member=True))
+    assert member.total == Money(6000)
+    disabled = service.checkout(make_session(600, lot_id="HJ-03", reduction=ReductionType.DISABLED))
+    assert disabled.total == Money(3000)
+
+
+def test_valid_season_pass_is_free(
+    pricing_config: PricingConfig, make_session: SessionFactory
+) -> None:
+    passes = FakeSeasonPassRepository(
+        [SeasonPass("34나5678", "HJ-01", date(2026, 9, 1), date(2026, 9, 30))]
+    )
+    service = CheckoutService(pricing_config, passes)
+    receipt = service.checkout(make_session(600, plate="34나5678"))
+    assert receipt.season_pass_applied
+    assert receipt.total == Money.zero()
+
+
+def test_season_pass_for_other_lot_is_charged(
+    pricing_config: PricingConfig, make_session: SessionFactory
+) -> None:
+    passes = FakeSeasonPassRepository(
+        [SeasonPass("34나5678", "HJ-02", date(2026, 9, 1), date(2026, 9, 30))]
+    )
+    receipt = CheckoutService(pricing_config, passes).checkout(make_session(60, plate="34나5678"))
+    assert not receipt.season_pass_applied
+    assert receipt.total == Money(3500)
+
+
+def test_pipeline_can_be_injected(
+    pricing_config: PricingConfig, make_session: SessionFactory
+) -> None:
+    service = CheckoutService(pricing_config, FakeSeasonPassRepository(), DiscountPipeline([]))
+    receipt = service.checkout(make_session(125, vehicle_type=VehicleType.COMPACT, is_member=True))
+    assert receipt.total == Money(7000)
+
+
+def test_coupon_policy_examples(service: CheckoutService, make_session: SessionFactory) -> None:
+    """할인·감면 규정 제13~15조: 시간 선차감 및 할인과 절사 후 비교."""
+    from datetime import datetime
+
+    from parkfee.domain.coupon import Coupon, CouponKind
+
+    def coupon(kind: CouponKind, value: int) -> Coupon:
+        return Coupon(
+            "TEST", kind, value, "HJ-02", "매장", datetime(2026, 9, 1), datetime(2026, 9, 30)
+        )
+
+    receipt = service.checkout(make_session(660, lot_id="HJ-02"), coupon(CouponKind.TIME, 120))
+    assert receipt.total == Money(27000)
+    assert receipt.charge == Money(30000)
+    assert receipt.coupon is not None and receipt.coupon.status.value == "applied"
+    session = make_session(120, lot_id="HJ-02", vehicle_type=VehicleType.COMPACT, is_member=True)
+    receipt = service.checkout(session, coupon(CouponKind.AMOUNT, 1000))
+    assert receipt.total == Money(3700)
+    assert receipt.coupon is not None and receipt.coupon.status.value == "unused"
+    receipt = service.checkout(
+        make_session(120, lot_id="HJ-02", is_member=True), coupon(CouponKind.TIME, 60)
+    )
+    assert receipt.total == Money(3000)
+    assert receipt.discounts == ()
+
+
+def test_coupon_boundaries(service: CheckoutService, make_session: SessionFactory) -> None:
+    """할인·감면 규정 제12, 15~18조: 동액 반환, 회차 및 출차 기준 유효기간."""
+    from datetime import datetime
+
+    from parkfee.domain.coupon import Coupon, CouponKind
+
+    coupon = Coupon(
+        "TEST",
+        CouponKind.AMOUNT,
+        100,
+        "HJ-01",
+        "매장",
+        datetime(2026, 9, 1, 10),
+        datetime(2026, 9, 1, 11),
+    )
+    for minutes, status in [(10, "unused"), (59, "unused"), (60, "applied"), (121, "expired")]:
+        receipt = service.checkout(make_session(minutes), coupon)
+        assert receipt.coupon is not None and receipt.coupon.status.value == status
+    wrong_lot = service.checkout(make_session(60, lot_id="HJ-02"), coupon)
+    assert wrong_lot.coupon is not None and wrong_lot.coupon.status.value == "unused"
+    tie = service.checkout(
+        make_session(60, is_member=True),
+        Coupon(
+            "TIE",
+            CouponKind.AMOUNT,
+            350,
+            "HJ-01",
+            "매장",
+            datetime(2026, 9, 1),
+            datetime(2026, 9, 2),
+        ),
+    )
+    assert tie.coupon is not None and tie.coupon.status.value == "unused"
+
+
+def test_coupon_free_and_time_limits(
+    pricing_config: PricingConfig, make_session: SessionFactory
+) -> None:
+    """할인·감면 규정 제13조와 제18조: 무료 시간과 정기권 처리."""
+    from datetime import datetime
+
+    from parkfee.domain.coupon import Coupon, CouponKind
+
+    coupon = Coupon(
+        "TEST", CouponKind.TIME, 120, "HJ-01", "매장", datetime(2026, 9, 1), datetime(2026, 9, 30)
+    )
+    service = CheckoutService(pricing_config, FakeSeasonPassRepository())
+    receipt = service.checkout(make_session(60), coupon)
+    assert receipt.total == Money.zero()
+    assert receipt.coupon is not None and receipt.coupon.status.value == "applied"
+    passes = FakeSeasonPassRepository(
+        [SeasonPass("34나5678", "HJ-01", date(2026, 9, 1), date(2026, 9, 30))]
+    )
+    receipt = CheckoutService(pricing_config, passes).checkout(
+        make_session(600, plate="34나5678"), coupon
+    )
+    assert receipt.season_pass_applied
+    assert receipt.coupon is not None and receipt.coupon.status.value == "unused"

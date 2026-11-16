@@ -1,0 +1,42 @@
+# 개발 환경 설정
+
+## 1. 준비물
+- Python 3.10 이상 (정산기 펌웨어 번들이 3.10이므로 3.10 문법까지만 사용)
+- Git, make
+- 사내 PyPI 미러 접속 설정 (사내 위키 "개발 PC 초기 설정" 문서 참고)
+
+## 2. 설치
+
+```bash
+git clone <사내 저장소 주소>/parkfee.git
+cd parkfee
+python -m venv .venv
+source .venv/bin/activate            # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+```
+
+## 3. 자주 쓰는 명령
+
+| 명령 | 내용 |
+|---|---|
+| `make test` | 테스트 실행 (조용한 출력) |
+| `make cov` | 테스트 + 커버리지 (90% 미만이면 실패) |
+| `make lint` | ruff 린트 |
+| `make typecheck` | mypy strict 타입 검사 |
+| `make check` | 위 세 가지를 모두 실행 (PR 전 필수) |
+| `python -m pytest -v -s --log-cli-level=DEBUG` | 계산 과정 로그까지 보며 테스트 (디버깅용) |
+
+## 4. 설치 없이 실행
+
+```bash
+PYTHONPATH=src python -m parkfee --data-dir data calc --lot HJ-01 --plate 12가3456 \
+  --entry 2026-09-01T09:00 --exit 2026-09-01T11:05 --format json
+```
+
+## 5. IDE
+- VS Code: Python, Ruff 확장 설치. `.editorconfig`를 따릅니다.
+- PyCharm: 인터프리터를 `.venv`로 지정하고 `src`를 Sources Root로 표시합니다.
+
+## 6. 문제 해결
+- `ModuleNotFoundError: parkfee`: `pip install -e .`을 하지 않았다면 `PYTHONPATH=src`를 붙입니다.
+- 한글이 깨짐(Windows): 터미널 인코딩을 UTF-8로 설정합니다 (`chcp 65001`).

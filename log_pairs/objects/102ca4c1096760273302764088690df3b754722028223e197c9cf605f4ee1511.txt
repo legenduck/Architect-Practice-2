@@ -1,0 +1,163 @@
+"""출력 형식(Strategy). text는 사람이 읽는 영수증, json은 정산기·앱 연동용이다.
+
+JSON 스키마는 docs/api/cli.md 를 따른다.
+"""
+
+from __future__ import annotations
+
+import json
+from abc import ABC, abstractmethod
+from typing import Any
+
+from parkfee.application.settlement import SettlementReport
+from parkfee.domain.coupon import Coupon
+from parkfee.domain.receipt import CouponStatus, Receipt
+
+DATETIME_DISPLAY = "%Y-%m-%d %H:%M"
+
+
+def format_minutes(minutes: int) -> str:
+    hours, rest = divmod(minutes, 60)
+    if hours == 0:
+        return f"{rest}분"
+    return f"{hours}시간 {rest}분"
+
+
+class OutputFormatter(ABC):
+    @abstractmethod
+    def receipt(self, receipt: Receipt) -> str:
+        raise NotImplementedError
+
+    @abstractmethod
+    def settlement(self, report: SettlementReport) -> str:
+        raise NotImplementedError
+
+    @abstractmethod
+    def coupon(self, coupon: Coupon) -> str:
+        raise NotImplementedError
+
+
+class TextFormatter(OutputFormatter):
+    def receipt(self, receipt: Receipt) -> str:
+        session = receipt.session
+        lines = [
+            "[한결파킹 주차 영수증]",
+            f"주차장   : {receipt.lot_name} ({session.lot_id})",
+            f"차량번호 : {session.plate}",
+            f"입차     : {session.entry_at:{DATETIME_DISPLAY}}",
+            f"출차     : {session.exit_at:{DATETIME_DISPLAY}}",
+            f"주차시간 : {format_minutes(receipt.parked_minutes)}",
+        ]
+        if receipt.season_pass_applied:
+            lines.append("비고     : 정기권 차량 (무료)")
+        elif receipt.grace_applied:
+            lines.append("비고     : 회차 차량 (무료)")
+        else:
+            lines.append(f"주차요금 : {receipt.charge}")
+            lines.extend(
+                f"할인     : {discount.name} -{discount.amount}" for discount in receipt.discounts
+            )
+        if receipt.coupon is not None:
+            labels = {
+                CouponStatus.APPLIED: "사용",
+                CouponStatus.UNUSED: "반환",
+                CouponStatus.EXPIRED: "만료",
+            }
+            lines.append(f"쿠폰     : {receipt.coupon.code} ({labels[receipt.coupon.status]})")
+        lines.append(
+            f"결제금액 : {receipt.total} (공급가액 {receipt.vat_supply} / 부가세 {receipt.vat_tax})"
+        )
+        return "\n".join(lines)
+
+    def settlement(self, report: SettlementReport) -> str:
+        lines = ["[일일 정산 리포트]"]
+        for lot in report.lots:
+            lines.append(
+                f"{lot.lot_id} {lot.lot_name}: {lot.sessions}건(무료 {lot.free_sessions}건) "
+                f"요금 {lot.charge} / 할인 {lot.discount} / 매출 {lot.revenue}"
+            )
+        lines.append(f"합계: {report.total_sessions}건, 매출 {report.total_revenue}")
+        return "\n".join(lines)
+
+    def coupon(self, coupon: Coupon) -> str:
+        return "\n".join(
+            [
+                f"쿠폰코드 : {coupon.code}",
+                f"내용     : {coupon.describe()}",
+                f"주차장   : {coupon.lot_id}",
+                f"유효기간 : {coupon.valid_from:{DATETIME_DISPLAY}} ~ "
+                f"{coupon.valid_until:{DATETIME_DISPLAY}}",
+            ]
+        )
+
+
+class JsonFormatter(OutputFormatter):
+    def receipt(self, receipt: Receipt) -> str:
+        session = receipt.session
+        payload: dict[str, Any] = {
+            "lot_id": session.lot_id,
+            "lot_name": receipt.lot_name,
+            "plate": session.plate,
+            "entry_at": session.entry_at.isoformat(),
+            "exit_at": session.exit_at.isoformat(),
+            "parked_minutes": receipt.parked_minutes,
+            "charge": receipt.charge.won,
+            "discounts": [
+                {"type": discount.kind.value, "name": discount.name, "amount": discount.amount.won}
+                for discount in receipt.discounts
+            ],
+            "total": receipt.total.won,
+            "vat": {"supply": receipt.vat_supply.won, "tax": receipt.vat_tax.won},
+            "grace": receipt.grace_applied,
+            "season_pass": receipt.season_pass_applied,
+            "coupon": (
+                {"code": receipt.coupon.code, "status": receipt.coupon.status.value}
+                if receipt.coupon is not None
+                else None
+            ),
+        }
+        return self._dump(payload)
+
+    def settlement(self, report: SettlementReport) -> str:
+        payload = {
+            "lots": [
+                {
+                    "lot_id": lot.lot_id,
+                    "lot_name": lot.lot_name,
+                    "sessions": lot.sessions,
+                    "free_sessions": lot.free_sessions,
+                    "charge": lot.charge.won,
+                    "discount": lot.discount.won,
+                    "revenue": lot.revenue.won,
+                }
+                for lot in report.lots
+            ],
+            "total_sessions": report.total_sessions,
+            "total_revenue": report.total_revenue.won,
+        }
+        return self._dump(payload)
+
+    def coupon(self, coupon: Coupon) -> str:
+        payload = {
+            "code": coupon.code,
+            "kind": coupon.kind.value,
+            "value": coupon.value,
+            "lot_id": coupon.lot_id,
+            "partner": coupon.partner,
+            "valid_from": coupon.valid_from.isoformat(),
+            "valid_until": coupon.valid_until.isoformat(),
+            "description": coupon.describe(),
+        }
+        return self._dump(payload)
+
+    @staticmethod
+    def _dump(payload: dict[str, Any]) -> str:
+        return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+FORMATTERS: dict[str, type[OutputFormatter]] = {"text": TextFormatter, "json": JsonFormatter}
+
+
+def create_formatter(name: str) -> OutputFormatter:
+    """출력 형식 이름으로 포매터를 만든다(Factory)."""
+    return FORMATTERS[name]()

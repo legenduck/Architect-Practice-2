@@ -1,0 +1,35 @@
+"""제휴 매장 쿠폰."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import datetime
+from enum import Enum
+
+
+class CouponKind(str, Enum):
+    """쿠폰 종류."""
+
+    TIME = "time"
+    AMOUNT = "amount"
+
+
+@dataclass(frozen=True)
+class Coupon:
+    """제휴 매장이 발급한 쿠폰. value 단위는 TIME이면 분, AMOUNT이면 원이다."""
+
+    code: str
+    kind: CouponKind
+    value: int
+    lot_id: str
+    partner: str
+    valid_from: datetime
+    valid_until: datetime
+
+    def is_valid_at(self, moment: datetime) -> bool:
+        return self.valid_from <= moment <= self.valid_until
+
+    def describe(self) -> str:
+        if self.kind is CouponKind.TIME:
+            return f"{self.partner} 무료 주차 {self.value}분"
+        return f"{self.partner} {self.value:,}원 할인"
