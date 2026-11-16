@@ -1,100 +1,74 @@
 # 실습 2: 과정 지표로 Codex 작업 평가하기
 
-실습 1의 쿠폰 기능 추가 과제를 수행한 기록을 지표별로 비교하고, 담당 업무에 맞는 과정 평가 지표를 설계합니다. 이론 2에서 다룬 낭비 사례 세 가지와 기법 적용 사례를 같은 데이터로 평가합니다.
+같은 쿠폰 기능 과제의 네 작업 방식을 비교하고, 담당 업무에 맞는 평가 지표를 설계합니다. 성공률 → 정답 1개당 비용 → 작업 구간별 토큰·시간 → 직접 설계한 지표 순서로 살펴봅니다.
 
-**[작업 기록 묶음](log_pairs/README.md)이 준비되어 있습니다.** 네 작업 방식마다 `codex.jsonl`과 `harness.jsonl`이 있으며, 같은 실행 ID와 호출 ID로 연결됩니다. 미리보기, 집계 재료, 파일 상태와 최종 코드의 채점 근거를 함께 제공합니다.
-
-## 작업 기록 열기
-
-```bash
-git clone https://github.com/legenduck/Architect-Practice-2.git
-cd Architect-Practice-2
-python log_pairs/analyze.py
-```
-
-`log_pairs/index.html`을 로컬 브라우저에서 엽니다. Python 3.10 이상이며 추가 패키지나 모델 호출은 필요하지 않습니다.
-
-- [두 로그의 구조와 읽는 방법](log_pairs/README.md)
-- [네 작업 방식의 로그 파일](log_pairs/cases/)
-- [지표 설계에 사용할 집계 재료](log_pairs/materials.json)
-- [자료 메타데이터](log_pairs/manifest.json)
-
-## 진행 순서
-
-| 시간 | 진행 |
-|---|---|
-| 15:30–16:30 | 제공된 지표 확인, 업무에 맞는 지표 설계와 적용 |
-| 16:30–17:00 | 지표가 드러낸 차이와 업무에서 필요한 이유 공유 |
-
-<details>
-<summary>기존 data/ 형식 분석 도구 사용법</summary>
-
-아래 `lab.py` 명령은 `data/` 형식의 자료에 사용하는 별도 분석 도구입니다. 위의 로그 쌍은 `python log_pairs/analyze.py`로 확인합니다.
+제공 자료는 **재구성한 교육용 로그**입니다. 최종 코드에는 독립 채점 근거가 있지만, 전체 작업 경로를 새로 실행한 기록은 아닙니다. 토큰과 시간은 계산·가정한 값이며 실제 서버 사용량·소요 시간·청구액이 아닙니다. [자료 생성 기준](log_pairs/manifest.json)을 함께 제공합니다.
 
 ## 시작하기
 
-Python 3.10 이상이 필요합니다. 분석 도구는 Python 표준 라이브러리만 사용하며 모델 API를 호출하지 않습니다. Codex는 지표의 정의와 해석을 돕는 데 사용합니다.
+Python 3.10 이상, Git, 로그인한 Codex CLI를 준비합니다. GitHub collaborator 초대를 수락하고 Git 로그인을 마쳐 둡니다. 분석·계산 도구에는 추가 패키지나 API 키가 필요하지 않습니다.
 
 ```bash
 git clone https://github.com/legenduck/Architect-Practice-2.git
 cd Architect-Practice-2
-python lab.py status
+python lab.py doctor
+python lab.py enroll p01
 python lab.py analyze
 ```
 
-Windows에서 `python` 명령이 없다면 `py`, macOS에서 구분이 필요한 경우 `python3`를 사용합니다. 생성된 `output/report.html`을 브라우저로 엽니다. `output/summary.csv`에는 같은 계산 결과가 표로 저장됩니다.
+`p01`은 배정받은 참가자 번호로 바꿉니다. macOS/Linux에서 필요한 경우 `python3`, Windows에서 `py`를 사용합니다.
 
-## 제공된 지표로 비교
+`doctor`는 자료의 연결·해시·집계, Codex 로그인·샌드박스 실행, Git 작성자와 제출 연결을 확인합니다. 실패한 항목에는 해결 방법이 표시됩니다. 원격 브랜치를 만들거나 모델을 호출하지 않습니다. 인터넷 없이 자료만 확인하려면 `python lab.py doctor --offline`을 사용할 수 있지만, 제출 연결은 온라인 doctor에서 확인해야 합니다.
 
-1. 과제 성공률을 확인합니다. 이 값만으로 작업 방식의 비효율을 구별할 수 있는지 살펴봅니다.
-2. 정답 1개당 비용을 비교합니다. 같은 성공률을 보이는 실행에서도 자원 사용량이 다른지 확인합니다.
-3. 작업 구간별 토큰과 시간을 확인합니다. 자원을 많이 쓴 구간의 실행 내용과 배분 근거를 함께 검토합니다.
+생성된 **`output/report.html`을 브라우저로 엽니다.** 화면 안의 작업 기록 링크에서 메시지·명령·반환값까지 확인할 수 있습니다. 모든 명령은 기본적으로 제공된 `log_pairs/`를 읽습니다.
 
-화면은 고정된 작업 방식 순서로 표시합니다. 순위를 매기거나 가장 좋은 방식을 자동으로 고르지 않습니다. 수치가 없는 항목은 미제공으로 표시합니다.
-
-## 담당 업무에 맞는 지표 설계
-
-먼저 무엇을 평가해야 하는지 정합니다. 강의에서 배운 지표와 제공된 측정값을 활용해 계산 방법과 해석 기준을 정하고, Codex에 지표 정의 파일 작성을 요청합니다. [지표 설계 안내](docs/metric-design.md)에 형식과 적용 예가 있습니다.
+## 지표 설계와 적용
 
 ```bash
 python lab.py new-metric
+codex
 ```
 
-생성된 `metrics/my_metric.json`은 형식 예시입니다. Codex에서 이 저장소를 열고, 담당 업무의 평가 목적에 맞게 해당 파일을 수정하도록 요청합니다. 원본 실행 데이터는 수정하지 않습니다.
+Codex에 평가 목적을 설명하고 `metrics/my_metric.json`을 작성하도록 요청합니다. 예를 들어:
+
+> 같은 코드·테스트·데이터·환경에서 이미 통과한 검증을 반복한 비율을 살펴보고 싶습니다. docs/metric-design.md를 읽고 이 목적에 맞게 metrics/my_metric.json을 수정해 주세요. 반복이 필요했는지는 수치만으로 단정하지 말고 해석의 한계에 적어 주세요. 원본 자료는 수정하지 마세요.
+
+Codex를 종료한 뒤 적용합니다.
 
 ```bash
 python lab.py analyze --metric metrics/my_metric.json
 ```
 
-결과 화면의 '설계한 지표'에서 네 작업 방식의 값을 확인합니다. 어떤 차이가 드러났는지, 이 지표가 설명하지 못하는 부분은 무엇인지 검토하고 필요하면 정의를 보완합니다.
+`output/report.html`을 새로 열어 네 작업 방식의 차이와 계산 근거를 확인합니다. 지표를 고치면 같은 명령으로 다시 계산할 수 있습니다. 기존 지표 파일이 있으면 `new-metric`을 다시 실행하지 않습니다.
 
-## 공유할 내용
-
-- 평가하려는 내용과 담당 업무에서 필요한 이유
-- 사용한 측정값과 계산 방법
-- 네 작업 방식에 적용한 결과
-- 지표가 드러낸 차이와 설명하지 못한 차이
-
-`output/evaluation.json`에는 지표 정의, 계산 결과와 데이터 식별값이 함께 저장됩니다. 모두 같은 데이터로 계산했는지 확인할 수 있습니다.
-
-## 개인 브랜치로 제출
-
-연구원이 배정한 참가자 번호로 개인 브랜치를 선택합니다. `p01`은 예시입니다.
+## 제출과 공유
 
 ```bash
-python lab.py enroll p01
-python lab.py submit --metric metrics/my_metric.json
+python lab.py submit
 ```
 
-제출 명령은 `submissions/metric.json`에 지표 정의와 결과를 저장하고, 이 파일만 개인 브랜치에 푸시합니다. 실제 데이터가 준비되지 않았거나 계산되지 않는 항목이 있으면 제출하지 않습니다. GitHub 참여 권한과 Git 로그인은 실습 1과 마찬가지로 사전에 확인합니다.
+개인 `students/p01` 브랜치에 `submissions/metric.json`만 커밋하고 푸시합니다. 지표 정의·계산 결과·자료 식별값이 함께 제출됩니다. 수정 후 같은 명령으로 재제출할 수 있습니다.
 
-공개 저장소에는 실습용 평가 기준만 작성합니다. 회사 내부 자료나 기밀 수치를 포함하지 않습니다.
+강사 측 자동 수집은 공통 자료로 다시 계산하고 GitHub Actions의 **Collect student metrics → practice2-sharing**에 공유 자료를 남깁니다. 참가자 번호순으로 표시하며 자동 순위를 매기지 않습니다.
 
-## 자료
+공유할 내용은 평가 목적, 계산 방법, 드러난 작업 차이, 해석의 한계입니다. 공개 저장소에는 실습용 기준만 작성하고 회사 기밀 자료를 넣지 않습니다.
 
+## 안내
+
+- [처음부터 제출까지 수강생 시나리오](docs/student-workflow.md)
+- [지표 설계 형식·사용 가능한 측정값](docs/metric-design.md)
+- [두 로그의 구조와 읽는 방법](log_pairs/README.md)
+- [강사 준비·제출 수집](docs/instructor.md)
 - [수강생용 슬라이드](slides/practice2-student.html)
 - [강의용 슬라이드](slides/practice2-presenter.html)
-- [지표 설계 안내](docs/metric-design.md)
-- [데이터 항목과 측정 기준](data/README.md)
+
+15:30–16:30에는 비교·지표 설계·적용을 진행하며 **16:25까지 제출**합니다. 16:30–17:00에는 결과와 해석을 공유합니다.
+
+<details>
+<summary>기존 data/ 형식으로 수집한 자료 사용</summary>
+
+기존 형식은 `python lab.py --data data analyze`처럼 자료 위치를 명시합니다. 현재 `data/`는 비어 있으며 기본 실습에 사용하지 않습니다. 형식 설명은 [data/README.md](data/README.md)를 참고하세요.
+
+`python log_pairs/analyze.py`로 제공 로그의 미리보기와 집계 재료만 다시 생성할 수도 있습니다. 일반 실습은 위의 `lab.py` 흐름 하나로 진행합니다.
 
 </details>
