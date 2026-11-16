@@ -1,0 +1,26 @@
+name: Collect student metrics
+on:
+  push:
+    branches: [main, 'students/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: collect-student-metrics
+  cancel-in-progress: true
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      # Always calculate using the instructor's main, not student code/results.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: python tools/collect_metrics.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: practice2-sharing
+          path: output/sharing/
